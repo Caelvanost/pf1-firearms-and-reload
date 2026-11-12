@@ -317,6 +317,41 @@ context.globalThis=context;vm.createContext(context);vm.runInContext(code,contex
  await fire(simple);
  assert.equal(count.rolls,3,'module remains enforced without a world setting');
  assert.equal(api.getState(weapon).slots.length,0,'empty weapon still denied');
+ // Native PF1 weapon actions are generated automatically and idempotently.
+ // No feat creation, no duplicate action and no guess for repeating weapons.
+ const examples=[
+  ['Arbalète légère','bolt','move'],
+  ['Arbalète lourde','bolt','full'],
+  ['Arbalète de poing','bolt','move'],
+  ['Pistolet à double canon','gunBullet','standard'],
+  ['Mousquet','gunBullet','full']
+ ];
+ for(const [name,ammoType,expected] of examples){
+  const a={id:'auto-'+expected,uuid:'Actor.a.Item.'+name,actor,type:'weapon',
+   name,actions:[{id:'fire',name:'Attack',hasAttack:true,actionType:'rwak',
+    ammo:{type:ammoType,cost:1}}]};
+  assert.equal(api.reloadProfile(a).base,expected);
+  assert.equal(await api.ensureReloadAction(a),true,'Action created for '+name);
+  assert.equal(a.actions.length,2);
+  assert.equal(a.actions[1].name,'Recharger');
+  assert.equal(a.actions[1].activation.type,expected);
+  assert.equal(a.actions[1].hasAttack,false);
+  assert.equal(await api.ensureReloadAction(a),false,'no duplicates for '+name);
+ }
+ for(const name of ['Arbalète à répétition','Revolver','Arbalète exotique']){
+  const a={id:'special',uuid:'Actor.a.Item.'+name,actor,type:'weapon',
+   name,actions:[{id:'fire',name:'Attack',hasAttack:true,actionType:'rwak',
+    ammo:{type:name.includes('Arbalète')?'bolt':'gunBullet',cost:1}}]};
+  assert.equal(await api.ensureReloadAction(a),false,'unsupported specialist: '+name);
+  assert.equal(a.actions.length,1);
+ }
+ const existing={id:'manual',uuid:'Actor.a.Item.manual',actor,type:'weapon',
+  name:'Pistolet',actions:[{id:'fire',hasAttack:true,actionType:'rwak',
+   ammo:{type:'gunBullet',cost:1}},{id:'existing',name:'Recharger',
+   hasAttack:false,activation:{type:'move'}}]};
+ assert.equal(await api.ensureReloadAction(existing),false,
+  'never override an existing custom Reload action');
+ assert.equal(existing.actions[1].activation.type,'move');
  assert.equal(typeof api.timing,'undefined','action economy belongs to native Reload');
  assert.ok(seenEvents.frReload>0&&seenEvents.frShot>0&&seenEvents.frUnload>0);
  assert.equal(seenEvents.frReload,seenEvents.oldReload,

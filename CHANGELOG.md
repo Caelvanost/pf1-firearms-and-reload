@@ -1,3 +1,13 @@
+## 0.2.0 — Automatic weapon-owned Reload actions (experimental)
+
+- On GM world startup, scan existing actor-owned weapons and create the native PF1 `Recharger` action where absent.
+- Also create the action for new or updated eligible weapon Items; no world-level activation setting.
+- Select native activation costs: light/hand crossbows (`move`), heavy crossbows (`full`), early one-handed pistols (`standard`), muskets and blunderbusses (`full`).
+- Do not modify existing Reload actions; avoid duplicates and do not guess specialized/repeating weapons.
+- Retain PF1 native ammo deduction and current reload state handling.
+- Rapid Reload feats, alchemical cartridges, repeating magazines and advanced firearm categories are **not automatically adjusted** in this initial release.
+- The native usage-dialog bypass still requires further live verification.
+
 ## 0.1.3 — ActionUse dialog bypass (experimental)
 
 - Skip the PF1 action configuration dialog on a recognized Reload by marking `ActionUse.shared.skipDialog` and wrapping `ActionUse.process({skipDialog:true})` through the `pf1CreateActionUse` hook.
