@@ -1,0 +1,9 @@
+{
+  "name": "pf1-firearms-and-reload",
+  "private": true,
+  "version": "0.1.0-dev.0",
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/*.test.mjs"
+  }
+}
