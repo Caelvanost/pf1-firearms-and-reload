@@ -444,7 +444,7 @@ async function rlEnsureReloadAction(weapon){
   // PF1 v11.11 Action.create expects an ARRAY of action data.
   // Passing an object throws "e.map is not a function" (action.mjs).
   const created=await Action.create([{
-   name:'Recharger',
+   name:'Reload',
    actionType:'other',
    hasAttack:false,
    activation:{type:profile.base},
