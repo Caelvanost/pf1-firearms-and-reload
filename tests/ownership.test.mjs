@@ -39,7 +39,7 @@ test("Foundry manifest includes only the new core and migration is imported",()=
  assert.deepEqual(manifest.esmodules,["scripts/reload-core.js"]);
  assert.doesNotMatch(source,/reloadEnabled|RL_ENABLED/,
   "No world toggle may control reloading in the standalone module");
- assert.doesNotMatch(source,/settings\\.(?:get|register)\\(/,
+ assert.equal(source.includes('game.settings.'),false,
   "No world settings must be required for core reload");
 
  assert.match(fs.readFileSync(new URL("../scripts/reload-core.js",import.meta.url),"utf8"),
