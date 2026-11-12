@@ -1,8 +1,8 @@
 {
   "id": "pf1-firearms-and-reload",
   "title": "PF1 Firearms & Reload",
-  "description": "Experimental PF1 firearm reloading; v0.1.2 intercepts PF1 Action.use from sheet buttons to bypass native Reload dialog.",
-  "version": "0.1.2",
+  "description": "Experimental PF1 firearm reloading; bypass Recharger/Reload dialog at native ActionUse processing boundary.",
+  "version": "0.1.3",
   "authors": [
     {
       "name": "Caelvanost"
@@ -42,6 +42,6 @@
   "url": "https://github.com/Caelvanost/pf1-firearms-and-reload",
   "manifest": "https://raw.githubusercontent.com/Caelvanost/pf1-firearms-and-reload/main/module.json",
   "readme": "https://github.com/Caelvanost/pf1-firearms-and-reload/blob/main/README.md",
-  "download": "https://github.com/Caelvanost/pf1-firearms-and-reload/releases/download/v0.1.2/pf1-firearms-and-reload-v0.1.2.zip",
+  "download": "https://github.com/Caelvanost/pf1-firearms-and-reload/releases/download/v0.1.3/pf1-firearms-and-reload-v0.1.3.zip",
   "changelog": "https://github.com/Caelvanost/pf1-firearms-and-reload/blob/main/CHANGELOG.md"
 }
