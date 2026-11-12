@@ -200,6 +200,18 @@ context.globalThis=context;vm.createContext(context);vm.runInContext(code,contex
  }),/in progress/i);
  assert.equal(api.getState(weapon).slots.length,2);
  vm.runInContext("RL_FIRING.delete(weapon.uuid)",context);
+ // Simulate a stale authorized shot whose selected ammunition does not
+ // match the currently loaded chambers. Never silently discard the slots.
+ const staleUse=new ActionUse(simple,1);
+ context.staleUse=staleUse;
+ vm.runInContext("RL_SHOTS.set(staleUse,{needed:1,selected:'wrong-ammo'})",context);
+ vm.runInContext("RL_FIRING.add(weapon.uuid)",context);
+ const beforeMismatch=api.getState(weapon);
+ await vm.runInContext("rlCommitShot(staleUse)",context);
+ assert.deepEqual(api.getState(weapon),beforeMismatch,
+  'mismatched shot leaves all chambers unchanged for manual reconciliation');
+ assert.equal(api.lastDiagnostic().status,'shot-reconciliation-required');
+ assert.equal(vm.runInContext("RL_FIRING.has(weapon.uuid)",context),false);
  await fire(double,2);await new Promise(r=>setImmediate(r));
  assert.equal(count.rolls,2);
  assert.equal(count.nativeAmmo,3,'double shot consumed two, not four');
