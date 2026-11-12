@@ -1,3 +1,10 @@
+## 0.2.1 — Stock crossbow detection fix (experimental)
+
+- Automatically add `Recharger` to recognized light/hand/heavy crossbows and standard early firearms without requiring native `Attack` ammunition fields to be configured first.
+- Reproduce a stock `Arbalète légère` containing only `Attack` in a regression test; verify native `move` action and nonduplication on subsequent updates.
+- Add `game.modules.get('pf1-firearms-and-reload').api.reload.diagnoseAutoAction(weapon)` for precise Foundry-side diagnosis.
+- The real reload operation still requires compatible PF1 ammunition, and the native use-dialog bypass is not verified in all sheet variants.
+
 ## 0.2.0 — Automatic weapon-owned Reload actions (experimental)
 
 - On GM world startup, scan existing actor-owned weapons and create the native PF1 `Recharger` action where absent.
