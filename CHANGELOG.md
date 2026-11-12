@@ -1,3 +1,11 @@
+## 0.3.5 — Set nonmagical exploded firearm HP to zero
+
+- Fix explosions that left the weapon's current hit points unchanged.
+- A **nonmagical** early firearm destroyed by a verified explosion now updates native PF1 item `system.hp.value=0` (and synchronizes `system.hp.offset` when the system exposes that field), preserving maximum HP and keeping its Item record for GM inspection.
+- Magical early firearms remain broken/unusable and retain their current hit points under their special rules; the `exploded` flag still blocks firing and reloading.
+- If an unusual item does not provide native numeric current HP, warn instead of inventing a field or modifying actor HP.
+- Tests cover nonmagical destruction, magical exception, and native HP-offset synchronization. Existing reload and explosion chat card remain unchanged.
+
 ## 0.3.4 — Automatic explosion damage roll and chat buttons (experimental)
 
 - On a confirmed early-firearm explosion, roll damage **automatically once** from the weapon's native PF1 attack damage parts; post a dedicated chat card containing the rolled result.

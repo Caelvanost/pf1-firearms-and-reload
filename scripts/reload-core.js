@@ -468,15 +468,45 @@ async function rlMarkMisfireBroken(weapon){
  * wrecked-vs-destroyed distinction require adjudication; the item is marked
  * unusable and can no longer shoot or reload through this module.
  */
+function rlIsMagicalFirearm(weapon){
+ const data=weapon?.system??{};
+ // A positive enhancement bonus makes this a magical weapon in PF1.
+ // Also recognize explicit magical item metadata and the magic property.
+ const enhancement=Number(data.enh?.value??data.enh??0);
+ return enhancement>0||data.magical===true||data.isMagic===true||
+  data.properties?.mgc===true||data.properties?.mgc?.value===true||
+  data.properties?.magic===true||data.properties?.magic?.value===true;
+}
+function rlExplosionHitPointUpdate(weapon){
+ if(rlIsMagicalFirearm(weapon))return {magical:true,hpChanged:false,changes:{}};
+ const hp=weapon?.system?.hp;
+ const changes={};
+ // PF1 physical item durability is stored in the weapon's own hp data.
+ // Preserve hp.max/base. Never set actor HP or fabricate missing durability.
+ if(hp&&typeof hp==='object'&&Number.isFinite(hp.value)){
+  changes['system.hp.value']=0;
+  // Some PF1 item data calculate value from max + offset.
+  // Keep that data consistent if the model exposes a persisted offset.
+  if(Number.isFinite(hp.offset)&&Number.isFinite(hp.max))
+   changes['system.hp.offset']=-hp.max;
+ }
+ return {magical:false,hpChanged:'system.hp.value' in changes,changes};
+}
 async function rlMarkExplosion(weapon,details){
  if(rlExploded(weapon))return false;
  if(!rlOwner(rlActor(weapon)))throw Error('Weapon OWNER permission required.');
+ const durability=rlExplosionHitPointUpdate(weapon);
  await weapon.update({
   'system.broken':true,
+  ...durability.changes,
   ['flags.'+RL_NS+'.exploded']:true,
   ['flags.'+RL_NS+'.explosionPending']:true
  });
- Hooks.callAll('pf1frFirearmExplosion',{weapon,...details});
+ if(!durability.magical&&!durability.hpChanged)
+  console.warn('[PF1FR][Misfire] Explosion recorded but item HP path unavailable',
+   {weaponUuid:weapon.uuid,hp:weapon.system?.hp});
+ Hooks.callAll('pf1frFirearmExplosion',{weapon,...details,
+  magical:durability.magical,hpChanged:durability.hpChanged});
  return true;
 }
 /**
@@ -1218,6 +1248,7 @@ Hooks.once('ready',async()=>{
    profile:rlMisfireProfile,inspect:rlInspectMisfire,
    isMarked:rlMisfireFlag,flagPath:'flags.'+RL_NS+'.misfire',
    isExploded:rlExploded,explodedFlagPath:'flags.'+RL_NS+'.exploded',
+   isMagical:rlIsMagicalFirearm,explosionHitPointUpdate:rlExplosionHitPointUpdate,
    explosionDamageFormula:rlExplosionDamageFormula,
    lastDiagnostic:()=>RL_MISFIRE_LAST?{...RL_MISFIRE_LAST}:null
   }),
