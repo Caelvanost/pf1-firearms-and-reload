@@ -501,34 +501,60 @@ function rlSheetWidget(sheet,html){
  * and no changes to normal attacks or ambiguous feat-based Reload actions.
  */
 function rlInstallInstantUse(){
- let proto=globalThis.CONFIG?.Item?.documentClass?.prototype;
- while(proto && !Object.prototype.hasOwnProperty.call(proto,'use'))
-  proto=Object.getPrototypeOf(proto);
- if(!proto || typeof proto.use!=='function'){
-  console.warn('[PF1FR][Reload] Could not locate PF1 ItemPF.use; native reload dialogs remain enabled.');
-  return false;
- }
- const original=proto.use;
- if(original.pf1frInstantReloadWrapped)return true;
- const wrapped=function(options={}){
-  // Resolve exactly the action PF1 will use. With no actionId, PF1 defaults
-  // to the first action. Never guess a different action or change roll modes.
-  if(!rlAllowed() || !options || typeof options!=='object' ||
-    options.skipDialog===true) return original.call(this,options);
-  const actions=rlActions(this);
-  const action=options.actionId!=null?
-    actions.find(a=>a?.id===options.actionId):actions[0];
-  if(!action || action.hasAttack===true)
-   return original.call(this,options);
-  const request=rlReloadRequest({item:this,actor:rlActor(this),action});
-  if(!request.candidate || !request.weapon)
-   return original.call(this,options);
-  return original.call(this,{...options,skipDialog:true});
+ const ensureSkip=(item,action,options)=>{
+  if(!rlAllowed()||!options||typeof options!=='object'||options.skipDialog===true)
+   return options;
+  if(!action||action.hasAttack===true)return options;
+  const request=rlReloadRequest({item,actor:rlActor(item),action});
+  return request.candidate&&request.weapon
+   ?{...options,skipDialog:true}:options;
  };
- wrapped.pf1frInstantReloadWrapped=true;
- proto.use=wrapped;
- console.info('[PF1FR][Reload] Native Reload actions now skip the usage dialog.');
- return true;
+ let installed=0;
+ // In PF1 v11.11 sheet buttons invoke the Action component's use(),
+ // which delegates to the owning Item. Hook this entry point first.
+ const actionProto=globalThis.pf1?.models?.components?.Action?.prototype;
+ if(actionProto && typeof actionProto.use==='function'){
+  const original=actionProto.use;
+  if(!original.pf1frInstantReloadWrapped){
+   const wrapped=function(options={}){
+    const item=this.item??this.parent;
+    return original.call(this,ensureSkip(item,this,options));
+   };
+   wrapped.pf1frInstantReloadWrapped=true;
+   actionProto.use=wrapped;
+  }
+  installed++;
+ }
+ // Also cover direct item.use() calls. PF1 subclasses may override the
+ // base implementation, so locate the concrete document class in addition
+ // to the inherited owner of use().
+ const itemClasses=new Set([
+  globalThis.CONFIG?.Item?.documentClass,
+  globalThis.pf1?.documents?.item?.ItemPF,
+  globalThis.pf1?.documents?.ItemPF
+ ]);
+ for(const cls of itemClasses){
+  let proto=cls?.prototype;
+  while(proto && !Object.prototype.hasOwnProperty.call(proto,'use'))
+   proto=Object.getPrototypeOf(proto);
+  if(!proto||typeof proto.use!=='function')continue;
+  const original=proto.use;
+  if(original.pf1frInstantReloadWrapped){installed++;continue;}
+  const wrapped=function(options={}){
+   const actions=rlActions(this);
+   const action=options?.actionId!=null?
+    actions.find(a=>a?.id===options.actionId):actions[0];
+   return original.call(this,ensureSkip(this,action,options));
+  };
+  wrapped.pf1frInstantReloadWrapped=true;
+  proto.use=wrapped;
+  installed++;
+ }
+ if(!installed)
+  console.warn('[PF1FR][Reload] Neither PF1 Action.use nor Item.use could be wrapped; native dialogs remain.');
+ else
+  console.info('[PF1FR][Reload] Instant native Reload active:',installed,'entry points.');
+ return installed>0;
 }
 function rlInstall(){
  // Works with private as well as public PF1 ActionUse classes. No prototype

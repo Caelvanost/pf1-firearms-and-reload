@@ -64,3 +64,7 @@ The pull request packaging workflow publishes a **temporary GitHub Actions artif
 ## Instant Reload action (v0.1.1)
 
 The module automatically detects a non-attack `Recharger` or `Reload` action on a weapon (and a standalone Reload feat when there is exactly one eligible weapon). It calls the **same native PF1 Item.use action**, using the original `actionId` and any supplied roll mode, but sets `skipDialog: true`. This removes the action-usage pop-up without changing attack handling, ammunition deduction, or the existing Reload post-use hook. There is no new world setting. If the action could resolve to multiple weapons, the native dialog remains instead of guessing.
+
+## v0.1.2 — Action-sheet click fix
+
+The v0.1.1 Item.use-only hook missed PF1 action-sheet buttons. This version also hooks `pf1.models.components.Action.prototype.use` so the action itself delegates to PF1 with `skipDialog: true` before opening its normal configuration popup. The module remains always-on and does not change attack dialogs. Test this release directly in Foundry; the regression harness simulates the native action forwarding path.
