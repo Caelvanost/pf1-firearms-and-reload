@@ -1,4 +1,4 @@
-import { migrateLegacyReload } from "./migration.js";
+import { migrateLegacyReload, migrateLegacySetting } from "./migration.js";
 /**
  * PF1AE reload core, Foundry 13 / PF1 11.11.
  * Inventory model B: native PF1 consumes ammunition exactly once when firing.
@@ -551,6 +551,9 @@ function rlInstall(){
  });;
 }
 Hooks.once('init',()=>{
+ game.settings.register(RL_NS,'migrationSchema',{
+  name:'Migration schema',scope:'world',config:false,restricted:true,type:Number,default:0
+ });
  game.settings.register(RL_NS,RL_ENABLED,{
   name:game.i18n?.localize?.('PF1FR.Settings.ReloadEnabled.Name')??'Automatic weapon reload tracking',
   hint:game.i18n?.localize?.('PF1FR.Settings.ReloadEnabled.Hint')??'Opt-in reload tracking for configured PF1 weapons.',
@@ -558,7 +561,10 @@ Hooks.once('init',()=>{
  });
 });
 Hooks.once('ready',async()=>{
- if(game.user?.isGM) await migrateLegacyReload();
+ if(game.user?.isGM){
+  await migrateLegacySetting();
+  await migrateLegacyReload();
+ }
  const mod=game.modules.get(RL_NS);
  if(!mod)return;
  mod.api??={};
