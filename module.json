@@ -1,8 +1,8 @@
 {
   "id": "pf1-firearms-and-reload",
   "title": "PF1 Firearms & Reload",
-  "description": "Experimental misfire detection using PF1 v11.11 native pf1AttackRoll hook for verified natural d20 results.",
-  "version": "0.3.1",
+  "description": "PF1 Firearms & Reload: first confirmed long feu marks item broken and records a script-readable misfire origin flag.",
+  "version": "0.3.2",
   "authors": [
     {
       "name": "Caelvanost"
@@ -42,6 +42,6 @@
   "url": "https://github.com/Caelvanost/pf1-firearms-and-reload",
   "manifest": "https://raw.githubusercontent.com/Caelvanost/pf1-firearms-and-reload/main/module.json",
   "readme": "https://github.com/Caelvanost/pf1-firearms-and-reload/blob/main/README.md",
-  "download": "https://github.com/Caelvanost/pf1-firearms-and-reload/releases/download/v0.3.1/pf1-firearms-and-reload-v0.3.1.zip",
+  "download": "https://github.com/Caelvanost/pf1-firearms-and-reload/releases/download/v0.3.2/pf1-firearms-and-reload-v0.3.2.zip",
   "changelog": "https://github.com/Caelvanost/pf1-firearms-and-reload/blob/main/CHANGELOG.md"
 }
