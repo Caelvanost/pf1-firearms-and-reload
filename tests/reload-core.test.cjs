@@ -345,6 +345,29 @@ context.globalThis=context;vm.createContext(context);vm.runInContext(code,contex
   assert.equal(await api.ensureReloadAction(a),false,'unsupported specialist: '+name);
   assert.equal(a.actions.length,1);
  }
+ // A stock compendium Light Crossbow often has only an 'Attack' action,
+ // and ammo fields may be null until the user links bolts. The Reload
+ // action must still appear immediately after adding the weapon.
+ for(const missingAmmo of [null,{type:null,cost:0},{type:'bolt',cost:0}]){
+  const unconfigured={id:'unconfigured',uuid:'Actor.a.Item.unconfigured',
+   actor,type:'weapon',name:'Arbalète légère',
+   actions:[{id:'stock-attack',name:'Attack',actionType:'rwak',hasAttack:true,
+    ammo:missingAmmo}]};
+  assert.equal(api.reloadProfile(unconfigured).base,'move',
+   'recognize French light crossbow independently of ammo settings');
+  assert.equal(await api.ensureReloadAction(unconfigured),true,
+   'create Recharger even if stock Attack does not yet have native bolt settings');
+  assert.equal(unconfigured.actions[1].name,'Recharger');
+  assert.equal(unconfigured.actions[1].activation.type,'move');
+  assert.equal(await api.ensureReloadAction(unconfigured),false,
+   'do not create duplicate Reload on updateItem');
+  assert.equal(api.diagnoseAutoAction(unconfigured).alreadyHasReload,true);
+ }
+ const noAction={id:'none',uuid:'Actor.a.Item.none',actor,type:'weapon',
+  name:'Light Crossbow',actions:[]};
+ assert.equal(await api.ensureReloadAction(noAction),true,
+  'recognized weapon still gets Reload when native attack action is absent');
+ assert.equal(noAction.actions[0].activation.type,'move');
  const existing={id:'manual',uuid:'Actor.a.Item.manual',actor,type:'weapon',
   name:'Pistolet',actions:[{id:'fire',hasAttack:true,actionType:'rwak',
    ammo:{type:'gunBullet',cost:1}},{id:'existing',name:'Recharger',
