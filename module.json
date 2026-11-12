@@ -1,8 +1,8 @@
 {
   "id": "pf1-firearms-and-reload",
   "title": "PF1 Firearms & Reload",
-  "description": "Experimental public test release: always-on PF1 firearms and crossbow reload tracking. Requires PF1AE >=1.24.6 when PF1AE is enabled.",
-  "version": "0.1.0",
+  "description": "Experimental public test release: always-on firearm reload tracking and instant native Recharger/Reload actions (skipDialog). Requires PF1AE >= 1.24.6 if PF1AE is active.",
+  "version": "0.1.1",
   "authors": [
     {
       "name": "Caelvanost"
@@ -42,6 +42,6 @@
   "url": "https://github.com/Caelvanost/pf1-firearms-and-reload",
   "manifest": "https://raw.githubusercontent.com/Caelvanost/pf1-firearms-and-reload/main/module.json",
   "readme": "https://github.com/Caelvanost/pf1-firearms-and-reload/blob/main/README.md",
-  "download": "https://github.com/Caelvanost/pf1-firearms-and-reload/releases/download/v0.1.0/pf1-firearms-and-reload-v0.1.0.zip",
+  "download": "https://github.com/Caelvanost/pf1-firearms-and-reload/releases/download/v0.1.1/pf1-firearms-and-reload-v0.1.1.zip",
   "changelog": "https://github.com/Caelvanost/pf1-firearms-and-reload/blob/main/CHANGELOG.md"
 }

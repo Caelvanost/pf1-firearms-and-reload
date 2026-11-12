@@ -491,6 +491,45 @@ function rlSheetWidget(sheet,html){
   else sidebar.append(container);
  }
 }
+/**
+ * PF1 ItemPF.use({ actionId, skipDialog }) is the native entry point used by
+ * action buttons. Only a resolved, non-attack Reload action is sent directly
+ * to PF1 with skipDialog=true; native ActionUse still executes its normal
+ * hooks, scripts, permissions and post-use reload bookkeeping.
+ *
+ * No replacement ActionUse, no custom ammo deduction, no click bubbling,
+ * and no changes to normal attacks or ambiguous feat-based Reload actions.
+ */
+function rlInstallInstantUse(){
+ let proto=globalThis.CONFIG?.Item?.documentClass?.prototype;
+ while(proto && !Object.prototype.hasOwnProperty.call(proto,'use'))
+  proto=Object.getPrototypeOf(proto);
+ if(!proto || typeof proto.use!=='function'){
+  console.warn('[PF1FR][Reload] Could not locate PF1 ItemPF.use; native reload dialogs remain enabled.');
+  return false;
+ }
+ const original=proto.use;
+ if(original.pf1frInstantReloadWrapped)return true;
+ const wrapped=function(options={}){
+  // Resolve exactly the action PF1 will use. With no actionId, PF1 defaults
+  // to the first action. Never guess a different action or change roll modes.
+  if(!rlAllowed() || !options || typeof options!=='object' ||
+    options.skipDialog===true) return original.call(this,options);
+  const actions=rlActions(this);
+  const action=options.actionId!=null?
+    actions.find(a=>a?.id===options.actionId):actions[0];
+  if(!action || action.hasAttack===true)
+   return original.call(this,options);
+  const request=rlReloadRequest({item:this,actor:rlActor(this),action});
+  if(!request.candidate || !request.weapon)
+   return original.call(this,options);
+  return original.call(this,{...options,skipDialog:true});
+ };
+ wrapped.pf1frInstantReloadWrapped=true;
+ proto.use=wrapped;
+ console.info('[PF1FR][Reload] Native Reload actions now skip the usage dialog.');
+ return true;
+}
 function rlInstall(){
  // Works with private as well as public PF1 ActionUse classes. No prototype
  // monkey-patching or dependency on undocumented global exports.
@@ -607,6 +646,7 @@ Hooks.once('ready',async()=>{
   return;
  }
  rlInstall();
+ rlInstallInstantUse();
  Hooks.on('renderItemSheet',rlSheetWidget);
  Hooks.on('renderItemSheetV2',rlSheetWidget);
 });

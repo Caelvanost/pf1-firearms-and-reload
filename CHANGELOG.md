@@ -1,3 +1,10 @@
+## 0.1.1 — Instant native Reload (experimental)
+
+- Automatically bypass PF1 handedness and roll-configuration dialogs for unambiguous non-attack `Recharger` / `Reload` actions using the native `ItemPF.use({skipDialog:true})` option.
+- Preserve native action IDs, existing roll modes, attack dialogs, normal PF1 action hooks and ammo tracking.
+- Support standalone Reload feats targeting exactly one eligible weapon; ambiguous targets remain unchanged.
+- Add regression tests for direct Reload, default action, ordinary attacks, feature association and wrapper idempotency.
+
 - Always-on reload manager: removing the world enable/disable setting and its migration; only Foundry module activation controls operation.
 - Fail visibly and safely when an active legacy PF1AE still owns reload hooks.
 # Changelog

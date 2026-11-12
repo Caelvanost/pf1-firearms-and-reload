@@ -62,6 +62,7 @@ const t=(id,cost=1)=>({id,name:id,item:weapon,actionType:'rwak',
  hasAttack:true,ammo:{type:'gunBullet',cost}});
 const simple=t('shot'),double=t('double');
 weapon.actions.push(simple,double);
+class NativeItemUseStub { use(options={}){return {called:true,options,owner:this}} }
 const context={console,Math,Number,Map,Set,WeakMap,WeakSet,Symbol,
  structuredClone,globalThis:null,foundry:{utils:{deepClone:structuredClone,
  escapeHTML:x=>x}},game:{user:{isGM:true},modules:new Map([[
@@ -72,6 +73,7 @@ const context={console,Math,Number,Map,Set,WeakMap,WeakSet,Symbol,
  ChatMessage:{getSpeaker:()=>({}),async create(){count.messages++}},
  pf1:{models:{components:{Action:actionType}},components:{ActionUse}},
 };
+context.CONFIG={Item:{documentClass:NativeItemUseStub}};
 context.migrateLegacyReload=async()=>({migrated:0});
 context.globalThis=context;vm.createContext(context);vm.runInContext(code,context);
 (async()=>{
@@ -176,6 +178,35 @@ context.globalThis=context;vm.createContext(context);vm.runInContext(code,contex
  assert.equal(weapon.system.ammo.default,'am','default relinked to matching ammo');
  await api.unload(weapon,{count:1});
  
+ // ItemPF.use receives options; only resolved Reload uses skipDialog.
+ const makeNative=(base,actions)=>Object.assign(new NativeItemUseStub(),base,{actions});
+ const nativeWeapon=makeNative(weapon,[
+  {id:'reload-direct',name:'Recharger',hasAttack:false,actionType:'other'},
+  {id:'shot-direct',name:'Tir simple',hasAttack:true,actionType:'rwak'}
+ ]);
+ const reloadInstant=nativeWeapon.use({actionId:'reload-direct',rollMode:'gmroll'});
+ assert.equal(reloadInstant.options.skipDialog,true,'Reload is immediate');
+ assert.equal(reloadInstant.options.rollMode,'gmroll','roll mode preserved');
+ assert.equal(reloadInstant.options.actionId,'reload-direct','native action preserved');
+ assert.equal(nativeWeapon.use({actionId:'shot-direct'}).options.skipDialog,undefined,
+  'attacks retain native dialogs');
+ assert.equal(nativeWeapon.use({actionId:'nonexistent'}).options.skipDialog,undefined,
+  'invalid action ID does not redirect the click');
+ assert.equal(nativeWeapon.use().options.skipDialog,true,
+  'default first Reload action is immediate');
+ const initialWrapper=NativeItemUseStub.prototype.use;
+ vm.runInContext('rlInstallInstantUse()',context);
+ assert.equal(NativeItemUseStub.prototype.use,initialWrapper,'hook is idempotent');
+ const nativeFeat=makeNative({id:'reloadFeat',type:'feat',name:'Recharger',actor},
+  [{id:'activate',name:'Utiliser',hasAttack:false,actionType:'other'}]);
+ assert.equal(nativeFeat.use({actionId:'activate'}).options.skipDialog,true,
+  'feat Reload is immediate for one weapon');
+ actor.items.set('otherGun',{...weapon,id:'otherGun',uuid:'Actor.a.Item.otherGun',
+  flags:{reloadState:api.getState(weapon)}});
+ assert.equal(nativeFeat.use({actionId:'activate'}).options.skipDialog,undefined,
+  'ambiguous feat preserves dialog');
+ actor.items.delete('otherGun');
+
  // User's "capacité Recharger" can also be a standalone nonattack feat.
  // Only one eligible weapon exists, so there is no ambiguous selection.
  const ability={id:'reloadFeat',type:'feat',name:'Recharger',actor,
