@@ -441,13 +441,15 @@ async function rlEnsureReloadAction(weapon){
  RL_ACTION_BUILDING.add(key);
  try{
   if(rlActions(weapon).some(a=>rlReloadName(a?.name)))return false;
-  const created=await Action.create({
+  // PF1 v11.11 Action.create expects an ARRAY of action data.
+  // Passing an object throws "e.map is not a function" (action.mjs).
+  const created=await Action.create([{
    name:'Recharger',
    actionType:'other',
    hasAttack:false,
    activation:{type:profile.base},
    ammo:{type:null,cost:0}
-  },{parent:weapon});
+  }],{parent:weapon});
   const action=Array.isArray(created)?created[0]:created;
   if(!action)throw Error('PF1 Action.create returned no created Action.');
   console.info('[PF1FR][Reload] Created native Reload action',weapon.name,
