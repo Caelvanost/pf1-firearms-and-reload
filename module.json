@@ -1,0 +1,45 @@
+{
+  "id": "pf1-firearms-and-reload",
+  "title": "PF1 Firearms & Reload",
+  "description": "PF1 11.11 weapon reload tracking extracted from PF1AE v1.24.5; preview, not yet a released build.",
+  "version": "0.1.0-dev.0",
+  "authors": [
+    {
+      "name": "Caelvanost"
+    }
+  ],
+  "compatibility": {
+    "minimum": "13",
+    "verified": "13.351"
+  },
+  "relationships": {
+    "systems": [
+      {
+        "id": "pf1",
+        "type": "system",
+        "compatibility": {
+          "minimum": "11.11",
+          "verified": "11.11"
+        }
+      }
+    ]
+  },
+  "esmodules": [
+    "scripts/reload-core.js"
+  ],
+  "languages": [
+    {
+      "lang": "en",
+      "name": "English",
+      "path": "lang/en.json"
+    },
+    {
+      "lang": "fr",
+      "name": "Français",
+      "path": "lang/fr.json"
+    }
+  ],
+  "url": "https://github.com/Caelvanost/pf1-firearms-and-reload",
+  "manifest": "https://raw.githubusercontent.com/Caelvanost/pf1-firearms-and-reload/main/module.json",
+  "readme": "https://github.com/Caelvanost/pf1-firearms-and-reload/blob/main/README.md"
+}
