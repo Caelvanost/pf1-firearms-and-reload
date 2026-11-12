@@ -585,19 +585,28 @@ function rlInstallInstantUse(){
    ?{...options,skipDialog:true}:options;
  };
  let installed=0;
- // In PF1 v11.11 sheet buttons invoke the Action component's use(),
- // which delegates to the owning Item. Hook this entry point first.
- const actionProto=globalThis.pf1?.models?.components?.Action?.prototype;
- if(actionProto && typeof actionProto.use==='function'){
-  const original=actionProto.use;
-  if(!original.pf1frInstantReloadWrapped){
-   const wrapped=function(options={}){
-    const item=this.item??this.parent;
-    return original.call(this,ensureSkip(item,this,options));
-   };
-   wrapped.pf1frInstantReloadWrapped=true;
-   actionProto.use=wrapped;
-  }
+ // PF1 11.11: the actual character-sheet action belongs to
+ // pf1.components.ItemAction (module/components/action.mjs).
+ // The earlier wrapper targeted the newer pf1.models.components.Action,
+ // leaving the real Reload button untouched. Patch both variants.
+ const actionClasses=new Set([
+  globalThis.pf1?.components?.ItemAction,
+  globalThis.pf1?.components?.Action,
+  globalThis.pf1?.models?.components?.Action
+ ]);
+ for(const cls of actionClasses){
+  let proto=cls?.prototype;
+  while(proto && !Object.prototype.hasOwnProperty.call(proto,'use'))
+   proto=Object.getPrototypeOf(proto);
+  if(!proto||typeof proto.use!=='function')continue;
+  const original=proto.use;
+  if(original.pf1frInstantReloadWrapped){installed++;continue;}
+  const wrapped=function(options={}){
+   const item=this.item??(this.parent?.documentName==='Item'?this.parent:null);
+   return original.call(this,ensureSkip(item,this,options));
+  };
+  wrapped.pf1frInstantReloadWrapped=true;
+  proto.use=wrapped;
   installed++;
  }
  // Also cover direct item.use() calls. PF1 subclasses may override the

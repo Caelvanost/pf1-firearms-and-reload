@@ -1,3 +1,10 @@
+## 0.2.4 — PF1 ItemAction Reload popup fix (experimental)
+
+- Intercept the correct PF1 v11.11 action class, `pf1.components.ItemAction.use`, before it forwards Reload to the item.
+- Pass `skipDialog: true` only for recognized non-attack `Reload` and `Recharger` actions; ordinary attacks and other actions remain unchanged.
+- Add a regression test using only the PF1 v11.11 action interface (no newer models Action.use shortcut).
+- This change still requires confirmation in a running Foundry world.
+
 ## 0.2.3 — Default action name Reload
 
 - Automatically created native reload actions are now named **Reload** instead of **Recharger**, regardless of the client language.
