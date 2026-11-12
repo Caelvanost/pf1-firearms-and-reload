@@ -19,8 +19,8 @@
       "Save": "Save",
       "Shots": "Attack action (optional)",
       "Base": "Base reload action",
-      "SettingsHint": "Opt-in tracking for configured firearms and crossbows. Native PF1 continues to consume ammunition. Requires manual per-weapon configuration; disabled by default.",
-      "SettingsName": "Automatic weapon reload tracking (experimental)",
+      "SettingsHint": "Automatic when PF1 Firearms & Reload is enabled in Manage Modules.",
+      "SettingsName": "Automatic weapon reloading",
       "SelectAmmo": "Choose inventory ammunition",
       "SelectAction": "Choose an attack action (optional)",
       "NoAmmo": "No native ammunition Item found in this actor's inventory. Add an Item of type Ammunition (ammo), not a general loot object.",
@@ -37,12 +37,6 @@
       "ReloadFailed": "Reload failed",
       "AmmoGuidance": "Check native PF1 Ammunition Items, their subtype and quantity. The Reload action must have ammunition set to None.",
       "Loading": "Loading"
-    },
-    "Settings": {
-      "ReloadEnabled": {
-        "Name": "Automatic weapon reload tracking (experimental)",
-        "Hint": "Opt-in tracking for configured firearms and crossbows. Native PF1 continues to consume ammunition. Requires manual per-weapon configuration; disabled by default."
-      }
     }
   }
 }
