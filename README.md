@@ -80,3 +80,7 @@ When a GM opens a world, PF1 Firearms & Reload now scans existing actor-owned we
 Default action economy (before feats, cartridges and special rules): **light/hand crossbow: move; heavy crossbow: full; early one-handed pistol: standard; early two-handed musket/blunderbuss: full**. Each activation reloads one chamber under the existing first-stage engine. Unrecognized/exotic, repeating and advanced firearms are intentionally excluded until their correct magazine and action rules have dedicated handling; we do not insert incorrect actions. Rapid Reload and cartridge adjustments are also a follow-up feature.
 
 The UI's separate native PF1 action-use dialog remains a known live-testing issue despite experimental bypass attempts in v0.1.1–0.1.3; this release adds actions, but does **not** claim that the popup is resolved in all sheet variants.
+
+## v0.2.1 — Stock crossbow fix
+
+The v0.2.0 automatic action creator incorrectly required a native attack with fully populated `ammo.type` and positive `ammo.cost`. An ordinary stock light crossbow might have only `Attack` without those settings. Recognized crossbows and simple early firearms are now classified by weapon identity and get their native `Recharger` action even when attack ammunition is not configured. Loading itself still validates compatible PF1 ammo. For debugging, select a weapon Item and call `game.modules.get("pf1-firearms-and-reload").api.reload.diagnoseAutoAction(weapon)` in the Foundry console.
