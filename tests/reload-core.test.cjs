@@ -407,7 +407,7 @@ context.globalThis=context;vm.createContext(context);vm.runInContext(code,contex
  // Reproduce the ACTUAL PF1 v11.11 ActionSelector popup from the player's
  // screenshot: div.action[data-action=click], img alt=Reload, parent form
  // id=ActionSelector-Actor-a-Item-none. This is not ItemAction.use.
- assert.equal(domHandlers.length,1,'install a capture-phase chooser click handler');
+ assert.equal(domHandlers.length,2,'install chooser and explosion capture-phase click handlers');
  const selected=noAction.actions[0];
  let used=null, chooserClosed=0;
  noAction.use=async options=>{used=options;return options};
