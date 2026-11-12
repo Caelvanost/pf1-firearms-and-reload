@@ -1,3 +1,10 @@
+## 0.1.3 — ActionUse dialog bypass (experimental)
+
+- Skip the PF1 action configuration dialog on a recognized Reload by marking `ActionUse.shared.skipDialog` and wrapping `ActionUse.process({skipDialog:true})` through the `pf1CreateActionUse` hook.
+- Preserve native PF1 attack processing, reload hooks, ammunition accounting, attack dialogs and roll options.
+- Expand tests to assert no dialogue in the simulated native ActionUse processing pipeline.
+- Live PF1 v11.11 validation remains necessary.
+
 ## 0.1.2 — Native action-sheet Reload dialog fix (experimental)
 
 - Fix direct click on Recharger/Reload from PF1 v11.11 character sheet by intercepting the Action component's `use()` in addition to Item `use()`.
