@@ -10,6 +10,12 @@ const RL_ACTION='pf1fr-reload';
 const RL_BUSY=new Set(),RL_SHOTS=new WeakMap(),RL_DENIED=new WeakSet();
 const RL_RELOAD_SEEN=new WeakSet();
 const RL_FIRING=new Set();
+// Compatibility bridge for worlds listening to PF1AE's old event names.
+// The old engine is unloaded, so these notifications never double-apply changes.
+const rlEvent=(current,legacy,payload)=>{
+ Hooks.callAll(current,payload);
+ if(legacy)Hooks.callAll(legacy,payload);
+};
 let RL_LAST=null;
 const rlL=(key,data={})=>{
  const fallback={
@@ -285,7 +291,7 @@ async function rlReload(weapon,{ammoId,count=1}={}){
    void ChatMessage.create({speaker:ChatMessage.getSpeaker({actor}),
      content:foundry.utils.escapeHTML?.(msg)??msg}).catch(err=>console.warn('[PF1FR][Reload] Chat',err));
   }
-  Hooks.callAll('pf1frReload', {actorUuid:actor.uuid,weaponUuid:weapon.uuid,
+  rlEvent('pf1frReload','pf1aeReload', {actorUuid:actor.uuid,weaponUuid:weapon.uuid,
     ammoId:selected,count,loaded:slots.length,capacity:current.capacity});
   return rlClone(next);
  });
@@ -300,7 +306,7 @@ async function rlUnload(weapon,{count=1}={}){
    throw Error('Invalid unload count.');
   const slots=state.slots.slice(0,-count),next={...state,slots};
   await weapon.setFlag(RL_NS,RL_KEY,next);
-  Hooks.callAll('pf1frReloadUnload',{actorUuid:actor.uuid,weaponUuid:weapon.uuid,
+  rlEvent('pf1frReloadUnload','pf1aeUnload',{actorUuid:actor.uuid,weaponUuid:weapon.uuid,
     count,loaded:slots.length});
   return rlClone(next);
  });
@@ -312,7 +318,7 @@ function rlDeny(use,result){
  RL_LAST={status:'blocked',actor:use.actor?.name??null,weapon:use.item?.name??null,
   action:use.action?.name??null,...result};
  console.warn('[PF1FR][Reload] Attack blocked before dice',result);
- Hooks.callAll('pf1frReloadFireDenied',{
+ rlEvent('pf1frReloadFireDenied','pf1aeReloadFireDenied',{
   actorUuid:use.actor?.uuid,weaponUuid:use.item?.uuid,
   actionId:use.action?.id,loaded:result.loaded??0,
   needed:result.needed??null,reason:result.reason??null});
@@ -335,7 +341,7 @@ async function rlCommitShot(use){
    // PF1 has already consumed native ammunition exactly once. We only
    // update the separate chamber state; never consume or refund inventory.
    await weapon.setFlag(RL_NS,RL_KEY,{...state,slots:after});
-   Hooks.callAll('pf1frReloadShot',{actorUuid:actor?.uuid,weaponUuid:weapon.uuid,
+   rlEvent('pf1frReloadShot','pf1aeReloadShot',{actorUuid:actor?.uuid,weaponUuid:weapon.uuid,
      actionId:use.action?.id,spent:result.needed,loaded:after.length});
   },{allowFiring:true});
  }catch(error){
