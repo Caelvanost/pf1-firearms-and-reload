@@ -73,6 +73,7 @@ const context={console,Math,Number,Map,Set,WeakMap,WeakSet,Symbol,
  pf1:{models:{components:{Action:actionType}},components:{ActionUse}},
 };
 context.migrateLegacyReload=async()=>({migrated:0});
+context.migrateLegacySetting=async()=>({skipped:true});
 context.globalThis=context;vm.createContext(context);vm.runInContext(code,context);
 (async()=>{
  for(const fn of once.get('init')??[])fn();
