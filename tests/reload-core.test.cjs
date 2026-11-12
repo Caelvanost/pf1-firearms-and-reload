@@ -490,6 +490,10 @@ context.globalThis=context;vm.createContext(context);vm.runInContext(code,contex
  });
  assert.equal(weapon.system.broken,true,'second misfire never clears native broken state');
  assert.equal(weapon.flags.misfire,true,'second misfire preserves original origin flag');
+ assert.equal(weapon.flags.exploded,true,
+  'second confirmed early misfire now triggers explosion');
+ weapon.flags.exploded=false;
+ weapon.flags.explosionPending=false;
  weapon.system.broken=false;
  weapon.flags.misfire=false;
  const damagedUse={...first,shared:{chatAttacks:[{attack:{roll:{dice:[
@@ -497,6 +501,10 @@ context.globalThis=context;vm.createContext(context);vm.runInContext(code,contex
  weapon.system.broken=true; // ordinary damage, not a misfire-origin break
  await vm.runInContext('rlTrackMisfire',context)(damagedUse);
  assert.equal(weapon.flags.misfire,false,'preexisting unrelated broken condition is not relabeled');
+ assert.equal(weapon.flags.exploded,true,
+  'even previously damage-broken early guns explode on a new misfire');
+ weapon.flags.exploded=false;
+ weapon.flags.explosionPending=false;
  weapon.system.broken=false;
  delete weapon.flags.misfire;
 
