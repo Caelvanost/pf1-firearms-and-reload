@@ -522,7 +522,10 @@ context.globalThis=context;vm.createContext(context);vm.runInContext(code,contex
  assert.equal(weapon.flags.explosionPending,true,'GM must resolve burst damage');
  assert.equal(weapon.flags.misfire,true,'repair origin flag preserved');
  assert.equal(api.misfire.isExploded(weapon),true);
- assert.equal(count.messages,messagesBeforeExplosion+1,'explosion announced in chat');
+ assert.equal(api.misfire.lastDiagnostic().explosionApplied,true,
+  'explosion has been applied successfully');
+ assert.equal(count.messages,messagesBeforeExplosion+1,
+  'explosion announced in chat: '+JSON.stringify(api.misfire.lastDiagnostic()));
  await assert.rejects(()=>api.reload(weapon,{count:1}),/exploded/i,
   'exploded firearm cannot reload');
  assert.equal(vm.runInContext('rlCheck',context)({
