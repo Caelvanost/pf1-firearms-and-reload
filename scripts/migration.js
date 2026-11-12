@@ -60,3 +60,28 @@ export async function migrateLegacyReload() {
   console.info("[PF1FR][Migration] Non-destructive reload state migration", report);
   return report;
 }
+
+/**
+ * Import the old opt-in world setting only once. Never overwrite settings on
+ * later boots, and never modify the legacy setting (rollback remains possible).
+ */
+export async function migrateLegacySetting() {
+  if (!game.user?.isGM) return {skipped:true,reason:"GM required"};
+  const gms=[...(game.users?.contents??[])].filter(u=>u.active&&u.isGM)
+    .sort((a,b)=>String(a.id).localeCompare(String(b.id)));
+  if(gms.length && gms[0].id!==game.user.id)
+    return {skipped:true,reason:"Another GM is migration coordinator"};
+  const marker=game.settings.get(NEW_NS,"migrationSchema");
+  if(marker>=1)return {skipped:true,reason:"Already migrated"};
+  try {
+    const old=game.settings.get(OLD_NS,"reloadEnabled");
+    if(typeof old!=="boolean")return {skipped:true,reason:"Old setting unavailable"};
+    await game.settings.set(NEW_NS,"reloadEnabled",old);
+    await game.settings.set(NEW_NS,"migrationSchema",1);
+    console.info("[PF1FR][Migration] Imported legacy reloadEnabled setting",old);
+    return {migrated:true,enabled:old};
+  } catch(error) {
+    console.warn("[PF1FR][Migration] Legacy world setting not imported",error);
+    return {skipped:true,reason:String(error?.message??error)};
+  }
+}
