@@ -22,6 +22,10 @@ const weapon={id:'w',uuid,type:'weapon',actor,actions:[],system:{ammo:{default:'
   if(Object.hasOwn(data,'system.broken'))this.system.broken=data['system.broken'];
   if(Object.hasOwn(data,'flags.pf1-firearms-and-reload.misfire'))
    this.flags.misfire=data['flags.pf1-firearms-and-reload.misfire'];
+  if(Object.hasOwn(data,'flags.pf1-firearms-and-reload.exploded'))
+   this.flags.exploded=data['flags.pf1-firearms-and-reload.exploded'];
+  if(Object.hasOwn(data,'flags.pf1-firearms-and-reload.explosionPending'))
+   this.flags.explosionPending=data['flags.pf1-firearms-and-reload.explosionPending'];
  },
 };
 actor.items.set('w',weapon);
@@ -486,6 +490,10 @@ context.globalThis=context;vm.createContext(context);vm.runInContext(code,contex
  });
  assert.equal(weapon.system.broken,true,'second misfire never clears native broken state');
  assert.equal(weapon.flags.misfire,true,'second misfire preserves original origin flag');
+ assert.equal(weapon.flags.exploded,true,
+  'second confirmed early misfire now triggers explosion');
+ weapon.flags.exploded=false;
+ weapon.flags.explosionPending=false;
  weapon.system.broken=false;
  weapon.flags.misfire=false;
  const damagedUse={...first,shared:{chatAttacks:[{attack:{roll:{dice:[
@@ -493,8 +501,73 @@ context.globalThis=context;vm.createContext(context);vm.runInContext(code,contex
  weapon.system.broken=true; // ordinary damage, not a misfire-origin break
  await vm.runInContext('rlTrackMisfire',context)(damagedUse);
  assert.equal(weapon.flags.misfire,false,'preexisting unrelated broken condition is not relabeled');
+ assert.equal(weapon.flags.exploded,true,
+  'even previously damage-broken early guns explode on a new misfire');
+ weapon.flags.exploded=false;
+ weapon.flags.explosionPending=false;
  weapon.system.broken=false;
  delete weapon.flags.misfire;
+
+ // PF1 broken early firearm: misfire range increases by +4.
+ weapon.name='Pistolet à double canon';
+ weapon.system.description={value:'Misfire 1–2 (5 ft.); Capacity 2'};
+ weapon.system.broken=true;weapon.flags.misfire=true;
+ const second=natural=>({item:weapon,actor,action:{
+  id:'shot',actionType:'rwak',hasAttack:true},
+  shared:{chatAttacks:[{attack:{roll:asRoll(natural)}}]}});
+ const secondResult=api.misfire.inspect(second(5));
+ assert.equal(secondResult.status,'explosion',
+  'already-broken early pistol explodes on natural 5 (misfire 1-6)');
+ assert.equal(secondResult.misfires[0].threshold,6);
+ assert.equal(secondResult.profile.burstRadius,5);
+ assert.equal(secondResult.profile.burstUnit,'ft');
+ assert.equal(api.misfire.inspect(second(7)).status,'clear');
+ // A verified explosion must mark the weapon unusable without deleting
+ // its Item, preserve the existing misfire origin flag and notify the GM.
+ const messagesBeforeExplosion=count.messages;
+ await vm.runInContext('rlTrackMisfire',context)(second(5));
+ assert.equal(weapon.flags.exploded,true,'explosion persisted on weapon Item');
+ assert.equal(weapon.flags.explosionPending,true,'GM must resolve burst damage');
+ assert.equal(weapon.flags.misfire,true,'repair origin flag preserved');
+ assert.equal(api.misfire.isExploded(weapon),true);
+ assert.equal(api.misfire.lastDiagnostic().explosionApplied,true,
+  'explosion has been applied successfully');
+ assert.equal(count.messages,messagesBeforeExplosion+1,
+  'explosion announced in chat: '+JSON.stringify(api.misfire.lastDiagnostic()));
+ await assert.rejects(()=>api.reload(weapon,{count:1}),/exploded/i,
+  'exploded firearm cannot reload');
+ assert.equal(vm.runInContext('rlCheck',context)({
+  item:weapon,action:simple
+ }).ok,false,'exploded firearm cannot shoot');
+ // An advanced firearm never explodes, even when already broken.
+ const advancedGun={...weapon,name:'Revolver',system:{
+  ...weapon.system,description:{value:'Misfire 1 (5 ft.)'}}};
+ const advancedUse={...second(1),item:advancedGun};
+ assert.equal(api.misfire.inspect(advancedUse).status,'misfire',
+  'advanced broken firearms do not explode');
+ // Explicitly designated gun training narrows broken range bonus +2.
+ weapon.flags.brokenMisfireIncrease=2;
+ assert.equal(api.misfire.inspect(second(5)).status,'clear',
+  'gun training +2 results in misfire 1-4 instead of 1-6');
+ assert.equal(api.misfire.inspect(second(4)).status,'explosion');
+ delete weapon.flags.brokenMisfireIncrease;
+ // Separate shot sequences from a multi-barrel weapon: the first misfire
+ // breaks the pistol, the second (with raised threshold) explodes.
+ weapon.system.broken=false;weapon.flags.misfire=false;
+ const multiple={...second(1),shared:{chatAttacks:[
+  {attack:{roll:asRoll(2)}},{attack:{roll:asRoll(5)}}
+ ]}};
+ const multiResult=api.misfire.inspect(multiple);
+ assert.equal(multiResult.status,'explosion');
+ assert.deepEqual(multiResult.misfires.map(x=>x.threshold),[2,6]);
+ const scatter={...multiple,action:{...multiple.action,name:'Scatter shot'}};
+ assert.equal(api.misfire.inspect(scatter).status,'unresolved',
+  'scatter attacks must not cause false positive explosions');
+ // Restore weapon for remaining native reload tests.
+ weapon.flags.exploded=false;
+ weapon.flags.explosionPending=false;
+ weapon.flags.misfire=false;
+ weapon.system.broken=false;
  weapon.name=savedName;weapon.system.description=savedDesc;
 
 

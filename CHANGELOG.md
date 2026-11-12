@@ -1,3 +1,14 @@
+## 0.3.3 — Second misfire and explosion tracking (experimental)
+
+- On a broken firearm, increase the natural-d20 misfire range by **+4**; an explicit weapon flag `flags.pf1-firearms-and-reload.brokenMisfireIncrease=2` enables the PF1 **+2** exception for applicable gun training. No automatic feat inference yet.
+- Evaluate successive attack rolls in order, including double-barreled weapons: a first misfire breaks the firearm, and a further misfire on an already-broken **early firearm** causes an explosion.
+- **Advanced firearms never explode** from repeated misfires.
+- Record early firearm explosion non-destructively as `flags.pf1-firearms-and-reload.exploded=true` and `explosionPending=true`; prevent further firing and reloading while the weapon remains exploded. The weapon Item is retained to avoid irreversible deletion and preserve its data.
+- Announce the burst radius when present in the description, affected creatures, **Reflex DC 12 for half damage**, and the need to determine whether a magical gun is wrecked or a nonmagical gun destroyed. Damage, saves, center selection and final loss/restoration are resolved by the GM, **not automatically**.
+- Avoid false-positive automated rulings on multirole scatter attacks; they report `unresolved` until grouped-scatter detection is implemented.
+- Preserve the earlier `misfire` cause flag for future Quick Clear/repair ability scripts; no automatic repair.
+- Reload and native ammo consumption logic are unchanged.
+
 ## 0.3.2 — Broken firearm misfire origin flag (experimental)
 
 - On first **confirmed** natural-d20 long feu, mark the weapon with PF1's native `system.broken=true` and persistent `flags.pf1-firearms-and-reload.misfire=true` in one Item update.
