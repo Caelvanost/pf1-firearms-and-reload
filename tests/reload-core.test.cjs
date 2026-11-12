@@ -73,7 +73,6 @@ const context={console,Math,Number,Map,Set,WeakMap,WeakSet,Symbol,
  pf1:{models:{components:{Action:actionType}},components:{ActionUse}},
 };
 context.migrateLegacyReload=async()=>({migrated:0});
-context.migrateLegacySetting=async()=>({skipped:true});
 context.globalThis=context;vm.createContext(context);vm.runInContext(code,context);
 (async()=>{
  for(const fn of once.get('init')??[])fn();
@@ -228,11 +227,9 @@ context.globalThis=context;vm.createContext(context);vm.runInContext(code,contex
  assert.equal(ammo.system.quantity,5,'other native ammo stack unchanged');
  actor.items.delete(legacy.id);
  weapon.system.ammo.default='am';
-  settings.set('reloadEnabled',false);
  await fire(simple);
- assert.equal(count.rolls,4,'module disabled => native PF1 allowed after legacy test shot');
- settings.set('reloadEnabled',true);
- assert.equal(api.getState(weapon).slots.length,0,'world flag remains persisted');
+ assert.equal(count.rolls,3,'module remains enforced without a world setting');
+ assert.equal(api.getState(weapon).slots.length,0,'empty weapon still denied');
  assert.equal(typeof api.timing,'undefined','action economy belongs to native Reload');
- console.log('PASS reload core: manual Reload, empty/double pre-roll denial, native ammo once, load/unload and opt-out');
+ console.log('PASS reload core: manual Reload, empty/double pre-roll denial, native ammo once, load/unload and always-on');
 })().catch(error=>{console.error(error);process.exitCode=1});
