@@ -40,7 +40,7 @@ const rlAllowed=()=>{
  if(game.modules.get(RL_NS)?.active!==true || game.settings.get(RL_NS,RL_ENABLED)!==true) return false;
  // Safe until PF1AE has been upgraded to a delegating compatibility adapter.
  const old=game.modules.get('pf1-automation-engine');
- if(old?.active && old.esmodules?.some(path=>path.endsWith('/reload-core.js'))) return false;
+ if(old?.active && old.api?.reloadDelegated !== true) return false;
  return true;
 };
 const rlActor=weapon=>weapon?.actor??(weapon?.parent?.documentName==='Actor'?weapon.parent:null);
