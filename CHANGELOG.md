@@ -1,3 +1,9 @@
+## 0.2.3 — Default action name Reload
+
+- Automatically created native reload actions are now named **Reload** instead of **Recharger**, regardless of the client language.
+- Keep accepting both `Reload` and `Recharger` on existing manually configured or previously generated weapon actions; do not rename any existing actions or change `Attack`.
+- Update regression tests for default generated action names.
+
 ## 0.2.2 — Native PF1 Action.create array contract fix
 
 - Fix `TypeError: e.map is not a function` in PF1 v11.11 when automatically generating weapon-owned Recharger actions; pass an array of action data to `Action.create([data], {parent: weapon})`.

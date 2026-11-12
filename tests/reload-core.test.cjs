@@ -336,7 +336,7 @@ context.globalThis=context;vm.createContext(context);vm.runInContext(code,contex
   assert.equal(api.reloadProfile(a).base,expected);
   assert.equal(await api.ensureReloadAction(a),true,'Action created for '+name);
   assert.equal(a.actions.length,2);
-  assert.equal(a.actions[1].name,'Recharger');
+  assert.equal(a.actions[1].name,'Reload');
   assert.equal(a.actions[1].activation.type,expected);
   assert.equal(a.actions[1].hasAttack,false);
   assert.equal(await api.ensureReloadAction(a),false,'no duplicates for '+name);
@@ -360,7 +360,7 @@ context.globalThis=context;vm.createContext(context);vm.runInContext(code,contex
    'recognize French light crossbow independently of ammo settings');
   assert.equal(await api.ensureReloadAction(unconfigured),true,
    'create Recharger even if stock Attack does not yet have native bolt settings');
-  assert.equal(unconfigured.actions[1].name,'Recharger');
+  assert.equal(unconfigured.actions[1].name,'Reload');
   assert.equal(unconfigured.actions[1].activation.type,'move');
   assert.equal(await api.ensureReloadAction(unconfigured),false,
    'do not create duplicate Reload on updateItem');
@@ -370,6 +370,7 @@ context.globalThis=context;vm.createContext(context);vm.runInContext(code,contex
   name:'Light Crossbow',actions:[]};
  assert.equal(await api.ensureReloadAction(noAction),true,
   'recognized weapon still gets Reload when native attack action is absent');
+ assert.equal(noAction.actions[0].name,'Reload');
  assert.equal(noAction.actions[0].activation.type,'move');
  const existing={id:'manual',uuid:'Actor.a.Item.manual',actor,type:'weapon',
   name:'Pistolet',actions:[{id:'fire',hasAttack:true,actionType:'rwak',
