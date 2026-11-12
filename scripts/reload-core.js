@@ -117,9 +117,10 @@ function rlAvailable(weapon,ammoId,state){
  const own=state.slots.filter(x=>x.ammoId===ammoId).length;
  return Math.max(0,rlQuantity(ammo)-rlReservations(actor,ammoId,weapon)-own);
 }
-const rlLock=async(weapon,fn)=>{
- const key=weapon.uuid;
- if(!key||RL_BUSY.has(key))throw Error('Weapon operation already in progress.');
+const rlLock=async(weapon,fn,{allowFiring=false}={})=>{
+ const key=weapon?.uuid;
+ if(!key||RL_BUSY.has(key)||(!allowFiring&&RL_FIRING.has(key)))
+  throw Error('Weapon operation already in progress.');
  RL_BUSY.add(key);
  try{return await fn()}finally{RL_BUSY.delete(key)}
 };
@@ -249,7 +250,7 @@ async function rlReload(weapon,{ammoId,count=1}={}){
  const actor=rlActor(weapon),state=rlState(weapon);
  if(!state)throw Error(rlL('Unconfigured'));
  if(!rlOwner(actor))throw Error('Actor OWNER permission required.');
- if(!rlAllowed())throw Error('Automatic reload is disabled.');
+ if(!rlAllowed())throw Error('Reload manager is unavailable or a legacy engine is still active.');
  if(!Number.isSafeInteger(count)||count<1)throw Error('Invalid reload quantity.');
  return rlLock(weapon,async()=>{
   const current=rlState(weapon);
@@ -299,7 +300,7 @@ async function rlUnload(weapon,{count=1}={}){
    throw Error('Invalid unload count.');
   const slots=state.slots.slice(0,-count),next={...state,slots};
   await weapon.setFlag(RL_NS,RL_KEY,next);
-  Hooks.callAll('pf1aeUnload',{actorUuid:actor.uuid,weaponUuid:weapon.uuid,
+  Hooks.callAll('pf1frReloadUnload',{actorUuid:actor.uuid,weaponUuid:weapon.uuid,
     count,loaded:slots.length});
   return rlClone(next);
  });
@@ -318,17 +319,34 @@ function rlDeny(use,result){
 }
 async function rlCommitShot(use){
  const actor=use.actor,weapon=use.item;
- const state=rlState(weapon),result=RL_SHOTS.get(use);
- if(!state||!result)return;
- const after=state.slots.slice(result.needed);
- // This happens after native PF1 subtractAmmo() succeeds and post-use
- // occurs. A failed server update must not invent or restore inventory ammo.
+ const result=RL_SHOTS.get(use);
+ if(!result)return;
+ // Avoid carrying a snapshot across asynchronous updates. Reserve the
+ // local weapon for the entire native use and read latest slots under lock.
  try{
-  await rlLock(weapon,()=>weapon.setFlag(RL_NS,RL_KEY,{...state,slots:after}));
-  Hooks.callAll('pf1frReloadShot',{actorUuid:actor?.uuid,weaponUuid:weapon.uuid,
-    actionId:use.action?.id,spent:result.needed,loaded:after.length});
- }catch(error){console.error('[PF1FR][Reload] Shot state update failed',error);}
- finally{RL_FIRING.delete(weapon.uuid);}
+  await rlLock(weapon,async()=>{
+   const state=rlState(weapon);
+   if(!state||state.slots.length<result.needed)
+    throw Error('Loaded state changed during a native shot; manual reconciliation required.');
+   const selected=state.slots.slice(0,result.needed);
+   if(selected.some(slot=>slot.ammoId!==result.selected))
+    throw Error('Loaded ammunition changed during a native shot; manual reconciliation required.');
+   const after=state.slots.slice(result.needed);
+   // PF1 has already consumed native ammunition exactly once. We only
+   // update the separate chamber state; never consume or refund inventory.
+   await weapon.setFlag(RL_NS,RL_KEY,{...state,slots:after});
+   Hooks.callAll('pf1frReloadShot',{actorUuid:actor?.uuid,weaponUuid:weapon.uuid,
+     actionId:use.action?.id,spent:result.needed,loaded:after.length});
+  },{allowFiring:true});
+ }catch(error){
+  RL_LAST={status:'shot-reconciliation-required',weapon:weapon?.name??null,
+   reason:String(error?.message??error)};
+  console.error('[PF1FR][Reload] Shot state update failed; inspect weapon and inventory',error);
+  ui.notifications?.error?.('Reload tracking requires manual reconciliation for '+(weapon?.name??'weapon')+'.');
+ }finally{
+  RL_SHOTS.delete(use);
+  RL_FIRING.delete(weapon?.uuid);
+ }
 }
 // Automatic but conservative PF1 weapon inference. Capacity is generally
 // printed in the compendium description, not in a universal WeaponModel field.
