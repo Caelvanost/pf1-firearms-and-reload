@@ -100,3 +100,7 @@ For weapon-owned Reload/Recharger actions, the module now invokes the parent wea
 ## v0.2.6 — PF1 ActionSelector click interception
 
 The real action selector UI uses `form#ActionSelector-...` and `div.action[data-action="click"]`, bypassing `ItemAction.use`. The module now resolves a weapon's exact selected Reload action from that chooser and uses the native `Item.use({actionId,skipDialog:true})` operation that worked in the user's macro. This is deliberately limited to an unambiguous Reload/Recharger action; attack buttons remain untouched. Verify in Foundry.
+
+## v0.2.7 — Close the Reload action chooser
+
+Upon selecting a weapon-owned Reload or Recharger entry, the module now closes the **specific** PF1 ActionSelector window using Foundry 13's `foundry.applications.instances` ApplicationV2 registry, before invoking the existing successful native Reload flow. Legacy `ui.windows` remains a fallback. Other windows, Attack actions, and ammunition processing remain unchanged.

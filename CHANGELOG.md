@@ -1,3 +1,10 @@
+## 0.2.7 — Close ActionSelector after Reload (experimental)
+
+- Fix the native PF1 ActionSelector remaining open after a successful direct Reload selection.
+- Find the exact chooser in Foundry V13 `foundry.applications.instances` (ApplicationV2 registry), instead of looking only in legacy `ui.windows`.
+- Close only the chooser containing the clicked Reload form, preserving other applications and all Attack actions.
+- Add a regression test for V2 chooser closure and isolation; no ammo or reload changes.
+
 ## 0.2.6 — PF1 ActionSelector Reload click fix (experimental)
 
 - Capture the real PF1 v11.11 action chooser click (`div.action[data-action="click"]` inside `form#ActionSelector-Actor-...-Item-...`), as identified in a live browser trace.

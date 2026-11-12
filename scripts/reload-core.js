@@ -623,14 +623,26 @@ function rlInstallSelectorReload(){
   event.stopImmediatePropagation?.();
   event.stopPropagation?.();
   const action=candidates[0];
-  // Close only the chooser containing this exact form.
-  for(const app of Object.values(ui.windows??{})){
+  // Foundry v13 ActionSelector is an ApplicationV2, registered in
+  // foundry.applications.instances (NOT ui.windows, which tracks V1).
+  // Match the actual clicked form against the application's rendered DOM.
+  // Keep the V1 fallback for older sheet integrations.
+  const appV2=globalThis.foundry?.applications?.instances;
+  const registeredApps=[
+   ...(appV2 instanceof Map?appV2.values():[]),
+   ...Object.values(ui.windows??{})
+  ];
+  const chooser=registeredApps.find(app=>{
    const root=app?.element?.[0]??app?.element;
-   if(root?.contains?.(form)||root===form){
-    void Promise.resolve(app.close?.()).catch(error=>
-     console.warn('[PF1FR][Reload] Could not close action chooser',error));
-    break;
-   }
+   return typeof app?.close==='function'&&
+    (root===form||root?.contains?.(form)||app?.form===form);
+  });
+  if(chooser){
+   void Promise.resolve().then(()=>chooser.close()).catch(error=>
+    console.warn('[PF1FR][Reload] Could not close action chooser',error));
+  }else{
+   console.warn('[PF1FR][Reload] No matching ActionSelector application found to close',
+    form.id);
   }
   console.debug('[PF1FR][Reload] ActionSelector selected Reload directly',
    weapon.name,action.id);
