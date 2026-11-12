@@ -146,6 +146,7 @@ function rlNeeded(use,state){
 function rlCheck(use){
  const weapon=use?.item;
  if(!rlAllowed()||weapon?.type!=='weapon'||rlNativeAction(use))return {managed:false};
+ if(rlExploded(weapon))return {managed:true,ok:false,reason:'firearm exploded / unusable'};
  const stored=rlState(weapon),inferred=stored?null:rlInfer(weapon);
  if(!stored&&!inferred?.ok){
   // A known firearm/crossbow with an attack must not silently fire because
@@ -254,6 +255,7 @@ function rlChooseAmmo(weapon,state,ammoId){
 }
 async function rlReload(weapon,{ammoId,count=1}={}){
  const actor=rlActor(weapon),state=rlState(weapon);
+ if(rlExploded(weapon))throw Error('Exploded firearm cannot be reloaded.');
  if(!state)throw Error(rlL('Unconfigured'));
  if(!rlOwner(actor))throw Error('Actor OWNER permission required.');
  if(!rlAllowed())throw Error('Reload manager is unavailable or a legacy engine is still active.');
@@ -349,8 +351,12 @@ function rlMisfireProfile(weapon){
  if(low!==1||high<1||high>10)
   return {supported:true,known:false,reason:'invalid misfire range'};
  const advanced=/(?:revolver|rifle|shotgun|fusil à pompe)/i.test(name);
+ const radiusMatch=source.match(/(?:misfire|long[ -]?feu|enrayement)\s*:?\s*1(?:\s*[-–—]\s*\d)?\s*\(\s*(\d+(?:[.,]\d+)?)\s*(ft\.?|feet|m|meters?|mètres?)\s*\)/i);
+ const radius=radiusMatch?Number(radiusMatch[1].replace(',','.')):null;
+ const unit=radiusMatch?.[2]?.toLowerCase().startsWith('f')?'ft':
+  radiusMatch?'m':null;
  return {supported:true,known:true,base:high,category:advanced?'advanced':'early',
-  source:'description'};
+  burstRadius:radius,burstUnit:unit,source:'description'};
 }
 function rlNaturalD20(roll){
  if(!roll||typeof roll!=='object')return null;
@@ -394,10 +400,33 @@ function rlInspectMisfire(use){
  if(!rolls?.length||rolls.some(r=>r===null))
   return {status:'unresolved',reason:'native PF1 natural d20 result not verified',
    profile,rolls};
- const threshold=profile.base;
- const misfires=rolls.map((natural,index)=>({index,natural,misfire:natural<=threshold}));
- return {status:misfires.some(r=>r.misfire)?'misfire':'clear',
-  profile,threshold,misfires};
+ // PF1: broken misfire +4, or +2 with firearm training in this
+ // particular weapon. A GM can explicitly record +2 on the weapon.
+ // Never infer weapon-specific class training from a generic class name.
+ const increase=use.item?.getFlag?.(RL_NS,'brokenMisfireIncrease')===2?2:4;
+ let broken=use.item?.isBroken===true||use.item?.system?.broken===true||
+  rlMisfireFlag(use.item);
+ const threshold=profile.base+(broken?increase:0);
+ const scatter=use.action?.scatter===true||
+  /(?:scatter|grapeshot|mitraille|grenaille|dispersion)/i.test(
+   String(use.action?.name??''));
+ // PF1 scatter: all target attack rolls must misfire; no premature
+ // explosion when one target is low. The first phase does not prove
+ // which individual dice are part of a single scatter volley.
+ if(scatter&&rolls.length>1)return {
+  status:'unresolved',reason:'scatter volley requires grouped attack adjudication',
+  profile,threshold,rolls};
+ const misfires=rolls.map((natural,index)=>{
+  const beforeBroken=broken,limit=Math.min(20,profile.base+(broken?increase:0));
+  const misfire=natural<=limit;
+  const explodes=misfire&&beforeBroken&&profile.category==='early';
+  if(misfire)broken=true;
+  return {index,natural,threshold:limit,misfire,alreadyBroken:beforeBroken,
+   explodes};
+ });
+ return {status:misfires.some(r=>r.explodes)?'explosion':
+  misfires.some(r=>r.misfire)?'misfire':'clear',
+  profile,threshold,brokenIncrease:increase,misfires};
 }
 function rlOnNativeAttackRoll(action,roll){
  if(!rlAllowed())return;
@@ -414,6 +443,7 @@ function rlOnNativeAttackRoll(action,roll){
   {weapon:item.name,natural:result,rolls:existing.length});
 }
 const rlMisfireFlag=weapon=>weapon?.getFlag?.(RL_NS,'misfire')===true;
+const rlExploded=weapon=>weapon?.getFlag?.(RL_NS,'exploded')===true;
 /**
  * Broken by a FIRST verified misfire: use PF1's actual system.broken
  * condition and a separate item flag recording the cause.
@@ -432,6 +462,43 @@ async function rlMarkMisfireBroken(weapon){
  });
  return true;
 }
+/**
+ * Preserve the Item and its content in Foundry instead of deleting it.
+ * Explosion damage, burst square selection, Reflex saves and the magical
+ * wrecked-vs-destroyed distinction require adjudication; the item is marked
+ * unusable and can no longer shoot or reload through this module.
+ */
+async function rlMarkExplosion(weapon,details){
+ if(rlExploded(weapon))return false;
+ if(!rlOwner(rlActor(weapon)))throw Error('Weapon OWNER permission required.');
+ await weapon.update({
+  'system.broken':true,
+  ['flags.'+RL_NS+'.exploded']:true,
+  ['flags.'+RL_NS+'.explosionPending']:true
+ });
+ Hooks.callAll('pf1frFirearmExplosion',{weapon,...details});
+ return true;
+}
+async function rlAnnounceExplosion(weapon,result,details){
+ if(typeof ChatMessage?.create!=='function')return;
+ const radius=result.profile?.burstRadius;
+ const radiusLabel=radius!=null
+  ?radius+' '+(result.profile.burstUnit==='m'?'m':'ft')
+  :'rayon à vérifier dans la description de l’arme';
+ const escape=globalThis.foundry?.utils?.escapeHTML??(x=>String(x));
+ const message='<p><strong>Explosion d’arme à feu : '+
+  escape(weapon.name)+'</strong></p>'+
+  '<p>Rayon : '+escape(radiusLabel)+
+  '. Choisir un coin de la case du porteur comme origine.</p>'+
+  '<p>Chaque créature dans la zone subit les dégâts normaux de l’arme.'+
+  ' <strong>Réflexes DD 12 : moitié des dégâts.</strong></p>'+
+  '<p>Arme rudimentaire non magique : détruite ; magique : hors service'+
+  ' jusqu’à réparation complète. Résolution MJ requise.</p>';
+ try{await ChatMessage.create({
+  speaker:ChatMessage.getSpeaker?.({actor:rlActor(weapon)})??{},
+  content:message
+ })}catch(error){console.warn('[PF1FR][Misfire] Explosion chat notice failed',error)}
+}
 async function rlTrackMisfire(use){
  if(!rlAllowed()||RL_MISFIRE_SEEN.has(use))return;
  RL_MISFIRE_SEEN.add(use);
@@ -439,29 +506,42 @@ async function rlTrackMisfire(use){
  if(result.status==='not-firearm')return;
  RL_MISFIRE_LAST={weapon:use?.item?.name??null,actor:use?.actor?.name??null,
   action:use?.action?.name??null,...result};
- if(result.status==='misfire'){
+ if(result.status==='misfire'||result.status==='explosion'){
   const weapon=use.item;
   const wasBroken=weapon.isBroken===true||weapon.system?.broken===true;
   const alreadyMarked=rlMisfireFlag(weapon);
-  let applied=false;
+  let applied=false,exploded=false;
   try{
+   // One ActionUse may contain sequential shots from separate barrels.
+   // Their natural d20 results were adjudicated in order by the inspector.
    if(!wasBroken&&!alreadyMarked){
     applied=await rlMarkMisfireBroken(weapon);
    }
+   if(result.status==='explosion'){
+    exploded=await rlMarkExplosion(weapon,{
+     use,result,reflexDC:12,burstRadius:result.profile.burstRadius,
+     burstUnit:result.profile.burstUnit
+    });
+    if(exploded)await rlAnnounceExplosion(weapon,result);
+   }
   }catch(error){
-   RL_MISFIRE_LAST={...RL_MISFIRE_LAST,brokenApplied:false,
+   RL_MISFIRE_LAST={...RL_MISFIRE_LAST,brokenApplied:applied,
     reason:String(error?.message??error)};
-   console.error('[PF1FR][Misfire] Could not mark weapon broken',error);
-   ui.notifications?.error?.('PF1FR: Impossible de marquer l’arme comme brisée après le long feu.');
+   console.error('[PF1FR][Misfire] Could not update broken/exploded weapon',error);
+   ui.notifications?.error?.('PF1FR: Échec de mise à jour de l’arme après long feu.');
   }
   RL_MISFIRE_LAST={...RL_MISFIRE_LAST,brokenApplied:applied,
+   explosionApplied:exploded,exploded:rlExploded(weapon),
    misfireFlag:rlMisfireFlag(weapon)};
   Hooks.callAll('pf1frMisfireDetected',{use,weapon,...result,
-   brokenApplied:applied,alreadyBroken:wasBroken,misfireFlag:rlMisfireFlag(weapon)});
-  if(applied)ui.notifications?.warn?.(
+   brokenApplied:applied,alreadyBroken:wasBroken,misfireFlag:rlMisfireFlag(weapon),
+   exploded:rlExploded(weapon)});
+  if(exploded)ui.notifications?.error?.(
+   'PF1FR : '+weapon.name+' explose ! Résoudre les dégâts et Réflexes DD 12.');
+  else if(applied)ui.notifications?.warn?.(
    'PF1FR: Long feu — '+weapon.name+' est brisé (misfire).');
   else if(wasBroken||alreadyMarked)ui.notifications?.warn?.(
-   'PF1FR: Nouveau long feu sur une arme déjà brisée — vérifiez les règles d’explosion.');
+   'PF1FR: Nouveau long feu sur une arme déjà brisée.');
  }else if(result.status==='unresolved'){
   console.debug('[PF1FR][Misfire] PF1 natural d20 data not established',RL_MISFIRE_LAST);
  }
@@ -1021,6 +1101,7 @@ Hooks.once('ready',async()=>{
   misfire:Object.freeze({
    profile:rlMisfireProfile,inspect:rlInspectMisfire,
    isMarked:rlMisfireFlag,flagPath:'flags.'+RL_NS+'.misfire',
+   isExploded:rlExploded,explodedFlagPath:'flags.'+RL_NS+'.exploded',
    lastDiagnostic:()=>RL_MISFIRE_LAST?{...RL_MISFIRE_LAST}:null
   }),
   lastDiagnostic:()=>RL_LAST?{...RL_LAST}:null,
