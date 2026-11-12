@@ -17,7 +17,12 @@ actor.items.set('am',ammo);
 const weapon={id:'w',uuid,type:'weapon',actor,actions:[],system:{ammo:{default:'am'}},
  flags:{},getFlag(_n,k){return this.flags[k]},
  async setFlag(_n,k,value){this.flags[k]=structuredClone(value);return this.flags[k]},
- async update(data){if(data['system.ammo.default'])this.system.ammo.default=data['system.ammo.default']},
+ async update(data){
+  if(data['system.ammo.default'])this.system.ammo.default=data['system.ammo.default'];
+  if(Object.hasOwn(data,'system.broken'))this.system.broken=data['system.broken'];
+  if(Object.hasOwn(data,'flags.pf1-firearms-and-reload.misfire'))
+   this.flags.misfire=data['flags.pf1-firearms-and-reload.misfire'];
+ },
 };
 actor.items.set('w',weapon);
 const events={on(n,fn){(listeners.get(n)??listeners.set(n,[]).get(n)).push(fn)},
@@ -462,6 +467,36 @@ context.globalThis=context;vm.createContext(context);vm.runInContext(code,contex
  assert.equal(api.misfire.inspect(asMisfireUse(2)).status,'misfire');
  assert.equal(api.misfire.inspect(asMisfireUse(3)).status,'clear');
  assert.equal(api.misfire.inspect(asMisfireUse(20)).status,'clear');
+ assert.equal(api.misfire.flagPath,'flags.pf1-firearms-and-reload.misfire');
+ assert.equal(api.misfire.isMarked(weapon),false,'unmarked weapon has no misfire origin');
+ // Simulate a first confirmed misfire on the weapon Item itself.
+ const savedName=weapon.name,savedDesc=weapon.system.description;
+ weapon.name='Pistolet à double canon';
+ weapon.system.description={value:'Misfire 1–2 (5 ft.); Capacity 2'};
+ const first={item:weapon,actor,action:{id:'shot',actionType:'rwak',hasAttack:true},
+  shared:{chatAttacks:[{attack:{roll:{dice:[{faces:20,results:[{result:1}]}]}}}]}};
+ await vm.runInContext('rlTrackMisfire',context)(first);
+ assert.equal(weapon.system.broken,true,'first confirmed misfire sets PF1 native broken condition');
+ assert.equal(weapon.getFlag('pf1-firearms-and-reload','misfire'),true,
+  'first confirmed misfire stores its origin on weapon Item');
+ assert.equal(api.misfire.isMarked(weapon),true,'script-readable flag accessor');
+ assert.equal(api.misfire.lastDiagnostic().brokenApplied,true);
+ await vm.runInContext('rlTrackMisfire',context)({
+  ...first,shared:{chatAttacks:[{attack:{roll:{dice:[{faces:20,results:[{result:2}]}]}}}]}
+ });
+ assert.equal(weapon.system.broken,true,'second misfire never clears native broken state');
+ assert.equal(weapon.flags.misfire,true,'second misfire preserves original origin flag');
+ weapon.system.broken=false;
+ weapon.flags.misfire=false;
+ const damagedUse={...first,shared:{chatAttacks:[{attack:{roll:{dice:[
+  {faces:20,results:[{result:1}]}]}}}]}};
+ weapon.system.broken=true; // ordinary damage, not a misfire-origin break
+ await vm.runInContext('rlTrackMisfire',context)(damagedUse);
+ assert.equal(weapon.flags.misfire,false,'preexisting unrelated broken condition is not relabeled');
+ weapon.system.broken=false;
+ delete weapon.flags.misfire;
+ weapon.name=savedName;weapon.system.description=savedDesc;
+
 
  // The system's real pf1AttackRoll hook supplies the evaluated attack
  // Roll before it is transformed to a chat card. Capture the actual
