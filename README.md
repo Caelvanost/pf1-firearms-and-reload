@@ -84,3 +84,7 @@ The UI's separate native PF1 action-use dialog remains a known live-testing issu
 ## v0.2.1 — Stock crossbow fix
 
 The v0.2.0 automatic action creator incorrectly required a native attack with fully populated `ammo.type` and positive `ammo.cost`. An ordinary stock light crossbow might have only `Attack` without those settings. Recognized crossbows and simple early firearms are now classified by weapon identity and get their native `Recharger` action even when attack ammunition is not configured. Loading itself still validates compatible PF1 ammo. For debugging, select a weapon Item and call `game.modules.get("pf1-firearms-and-reload").api.reload.diagnoseAutoAction(weapon)` in the Foundry console.
+
+## v0.2.3 — Reload action name
+
+New automatically created weapon actions are named **Reload** (not Recharger). Previously created Recharger actions and manual custom action names are preserved and continue to be recognized; the native Attack action is unchanged.
