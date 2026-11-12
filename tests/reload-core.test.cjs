@@ -6,7 +6,7 @@ const vm=require('node:vm');
 const code=fs.readFileSync(path.resolve(__dirname,'../scripts/reload-core.js'),'utf8').replace(/^import .*migration\.js.*\n/m,'');
 const listeners=new Map(),once=new Map(),settings=new Map([
  ['genericEnabled',true],['reloadEnabled',true]]);
-const count={rolls:0,charges:0,nativeAmmo:0,messages:0,warns:0};
+const count={rolls:0,charges:0,nativeAmmo:0,messages:0,warns:0,dialogs:0};
 const uuid='Actor.a.Item.w';
 const actor={id:'a',uuid:'Actor.a',documentName:'Actor',items:new Map(),
  testUserPermission(){return true}};
@@ -164,8 +164,19 @@ context.globalThis=context;vm.createContext(context);vm.runInContext(code,contex
  const reloadAction={id:'manual-reload',name:'Recharger',actionType:'other',
   hasAttack:false,ammo:{type:null,cost:0}};
  weapon.actions.push(reloadAction);
+ const dialogCountBeforeReload=count.dialogs;
  await fire(reloadAction);
  await new Promise(r=>setImmediate(r));
+ assert.equal(count.dialogs,dialogCountBeforeReload,
+  'real PF1 ActionUse.process reload path must skip dialog');
+ const syntheticUse=new ActionUse(reloadAction,0);
+ events.callAll('pf1CreateActionUse',syntheticUse);
+ assert.equal(syntheticUse.shared.skipDialog,true,
+  'pre-process PF1 hook marks reload dialog as skipped');
+ assert.equal(typeof syntheticUse.process,'function');
+ assert.equal(syntheticUse.process.pf1frInstantProcessWrapped,true,
+  'pre-process PF1 hook wraps actual ActionUse.process, not only Item.use');
+
  assert.equal(api.getState(weapon).slots.length,1,'manually created native Reload action loads one');
  assert.equal(ammo.system.quantity,8,'no inventory consumption at reload');
  await fire(double,2);
