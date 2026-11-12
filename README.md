@@ -96,3 +96,7 @@ The experimental popup bypass now also targets the older PF1 `pf1.components.Ite
 ## v0.2.5 — Direct weapon Reload use
 
 For weapon-owned Reload/Recharger actions, the module now invokes the parent weapon's native `ItemPF.use({actionId,skipDialog:true})` (same API as the validated Foundry macro) instead of trying to forward dialog options via the `ItemAction.use` wrapper. Other actions and native ammo rules are unchanged. This remains a live-test prerelease.
+
+## v0.2.6 — PF1 ActionSelector click interception
+
+The real action selector UI uses `form#ActionSelector-...` and `div.action[data-action="click"]`, bypassing `ItemAction.use`. The module now resolves a weapon's exact selected Reload action from that chooser and uses the native `Item.use({actionId,skipDialog:true})` operation that worked in the user's macro. This is deliberately limited to an unambiguous Reload/Recharger action; attack buttons remain untouched. Verify in Foundry.
