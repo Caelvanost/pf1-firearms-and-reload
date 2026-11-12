@@ -73,7 +73,7 @@ test("world reload opt-in setting migrates once and retains legacy value", async
   assert.equal(data.get("pf1-firearms-and-reload.reloadEnabled"),true);
   assert.equal(data.get("pf1-firearms-and-reload.migrationSchema"),1);
   assert.equal(data.get("pf1-automation-engine.reloadEnabled"),true);
-  await game.settings.set("pf1-firearms-and-reload.reloadEnabled",false);
+  await game.settings.set("pf1-firearms-and-reload","reloadEnabled",false);
   const twice=await migrateLegacySetting();
   assert.equal(twice.skipped,true);
   assert.equal(data.get("pf1-firearms-and-reload.reloadEnabled"),false);
