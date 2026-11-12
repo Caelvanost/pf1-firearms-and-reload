@@ -76,7 +76,7 @@ class NativeActionUseStub {
 }
 NativeActionUseStub.create=actionType.create;
 const context={console,Math,Number,Map,Set,WeakMap,WeakSet,Symbol,
- structuredClone,globalThis:null,foundry:{utils:{deepClone:structuredClone,
+ structuredClone,globalThis:null,foundry:{applications:{instances:new Map()},utils:{deepClone:structuredClone,
  escapeHTML:x=>x}},game:{user:{isGM:true},actors:{contents:[actor]},scenes:{contents:[]},modules:new Map([[
  'pf1-firearms-and-reload',{active:true,api:{}}]]),
  settings:{get:(_ns,k)=>settings.get(k),register:(_ns,k,opt)=>{
@@ -398,8 +398,17 @@ context.globalThis=context;vm.createContext(context);vm.runInContext(code,contex
  noAction.use=async options=>{used=options;return options};
  actor.items.set(noAction.id,noAction);
  const form={id:'ActionSelector-Actor-a-Item-none'};
- context.ui.windows={1:{element:{contains:x=>x===form},
-  close:async()=>{chooserClosed++}}};
+ // Foundry 13 registers ActionSelector in ApplicationV2 instances, not
+ // ui.windows. An unrelated window must never be closed.
+ let unrelatedClosed=0;
+ context.ui.windows={};
+ context.foundry.applications.instances.set('unrelated',{
+  element:{contains:()=>false},close:async()=>{unrelatedClosed++}
+ });
+ context.foundry.applications.instances.set('chooser',{
+  element:{contains:x=>x===form},form,
+  close:async()=>{chooserClosed++}
+ });
  const selection=(label)=>{
   const row={textContent:label,querySelector:()=>({
    getAttribute:()=>label
@@ -424,7 +433,9 @@ context.globalThis=context;vm.createContext(context);vm.runInContext(code,contex
  assert.equal(reloadEvent.stopped,true);
  assert.equal(used.actionId,selected.id,'native action ID is preserved');
  assert.equal(used.skipDialog,true,'no PF1 handedness/roll dialog after selection');
- assert.equal(chooserClosed,1,'only relevant chooser closes');
+ assert.equal(chooserClosed,1,'Foundry 13 ApplicationV2 chooser closes');
+ assert.equal(unrelatedClosed,0,'unrelated ApplicationV2 stays open');
+ context.foundry.applications.instances.clear();
  actor.items.delete(noAction.id);
 
  const existing={id:'manual',uuid:'Actor.a.Item.manual',actor,type:'weapon',
