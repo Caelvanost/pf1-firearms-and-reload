@@ -1,8 +1,8 @@
 {
   "id": "pf1-firearms-and-reload",
   "title": "PF1 Firearms & Reload",
-  "description": "Experimental PF1 weapon reload: direct native ItemPF.use for weapon-owned Reload buttons to bypass usage dialogue.",
-  "version": "0.2.5",
+  "description": "Experimental PF1 firearms and crossbow Reload: direct execution from native ActionSelector Reload/Recharger choices, preserving attack dialogs.",
+  "version": "0.2.6",
   "authors": [
     {
       "name": "Caelvanost"
@@ -42,6 +42,6 @@
   "url": "https://github.com/Caelvanost/pf1-firearms-and-reload",
   "manifest": "https://raw.githubusercontent.com/Caelvanost/pf1-firearms-and-reload/main/module.json",
   "readme": "https://github.com/Caelvanost/pf1-firearms-and-reload/blob/main/README.md",
-  "download": "https://github.com/Caelvanost/pf1-firearms-and-reload/releases/download/v0.2.5/pf1-firearms-and-reload-v0.2.5.zip",
+  "download": "https://github.com/Caelvanost/pf1-firearms-and-reload/releases/download/v0.2.6/pf1-firearms-and-reload-v0.2.6.zip",
   "changelog": "https://github.com/Caelvanost/pf1-firearms-and-reload/blob/main/CHANGELOG.md"
 }
