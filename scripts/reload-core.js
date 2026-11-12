@@ -1,11 +1,11 @@
-import { migrateLegacyReload, migrateLegacySetting } from "./migration.js";
+import { migrateLegacyReload } from "./migration.js";
 /**
  * PF1AE reload core, Foundry 13 / PF1 11.11.
  * Inventory model B: native PF1 consumes ammunition exactly once when firing.
  * Loaded rounds are reserved, not removed from inventory by reload.
  * Only explicitly configured weapons are intercepted.
  */
-const RL_NS='pf1-firearms-and-reload',RL_KEY='reloadState',RL_ENABLED='reloadEnabled';
+const RL_NS='pf1-firearms-and-reload',RL_KEY='reloadState';
 const RL_ACTION='pf1fr-reload';
 const RL_BUSY=new Set(),RL_SHOTS=new WeakMap(),RL_DENIED=new WeakSet();
 const RL_RELOAD_SEEN=new WeakSet();
@@ -37,7 +37,7 @@ const rlL=(key,data={})=>{
  return translated;
 };
 const rlAllowed=()=>{
- if(game.modules.get(RL_NS)?.active!==true || game.settings.get(RL_NS,RL_ENABLED)!==true) return false;
+ if(game.modules.get(RL_NS)?.active!==true) return false;
  // Safe until PF1AE has been upgraded to a delegating compatibility adapter.
  const old=game.modules.get('pf1-automation-engine');
  if(old?.active && old.api?.reloadDelegated !== true) return false;
@@ -550,21 +550,8 @@ function rlInstall(){
   if(use?.item?.type==='weapon'&&RL_SHOTS.has(use))void rlCommitShot(use);
  });;
 }
-Hooks.once('init',()=>{
- game.settings.register(RL_NS,'migrationSchema',{
-  name:'Migration schema',scope:'world',config:false,restricted:true,type:Number,default:0
- });
- game.settings.register(RL_NS,RL_ENABLED,{
-  name:game.i18n?.localize?.('PF1FR.Settings.ReloadEnabled.Name')??'Automatic weapon reload tracking',
-  hint:game.i18n?.localize?.('PF1FR.Settings.ReloadEnabled.Hint')??'Opt-in reload tracking for configured PF1 weapons.',
-  scope:'world',config:true,restricted:true,type:Boolean,default:false
- });
-});
 Hooks.once('ready',async()=>{
- if(game.user?.isGM){
-  await migrateLegacySetting();
-  await migrateLegacyReload();
- }
+ if(game.user?.isGM) await migrateLegacyReload();
  const mod=game.modules.get(RL_NS);
  if(!mod)return;
  mod.api??={};
@@ -580,6 +567,15 @@ Hooks.once('ready',async()=>{
   lastDiagnostic:()=>RL_LAST?{...RL_LAST}:null,
   ammoDiagnostic:rlAmmoDiagnostic
  });
+ if(!rlAllowed()){
+  const old=game.modules.get('pf1-automation-engine');
+  if(old?.active){
+   const message='PF1 Firearms & Reload: PF1 Automation Engine still owns the old reload hooks. Update PF1AE to the version that delegates reloading; do not use both reload engines.';
+   console.error(message);
+   if(game.user?.isGM) ui.notifications?.error?.(message,{permanent:true});
+  }
+  return;
+ }
  rlInstall();
  Hooks.on('renderItemSheet',rlSheetWidget);
  Hooks.on('renderItemSheetV2',rlSheetWidget);
