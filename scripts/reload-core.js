@@ -557,6 +557,24 @@ function rlInstallInstantUse(){
  return installed>0;
 }
 function rlInstall(){
+ // The actual PF1 dialog is created by ActionUse.process({skipDialog}).
+ // PF1 constructs the ActionUse before processing and exposes that instance
+ // through pf1CreateActionUse, independent of the sheet click handler.
+ Hooks.on('pf1CreateActionUse',use=>{
+  if(!rlAllowed()||typeof use?.process!=='function')return;
+  const request=rlReloadRequest(use);
+  if(!request.candidate||!request.weapon||use.action?.hasAttack)return;
+  const original=use.process;
+  if(original.pf1frInstantProcessWrapped)return;
+  const wrapped=function(options={}){
+   // Respect all native options, notably chatMessage and rollMode.
+   const overrides=options&&typeof options==='object'
+    ?{...options,skipDialog:true}:{skipDialog:true};
+   return original.call(this,overrides);
+  };
+  wrapped.pf1frInstantProcessWrapped=true;
+  use.process=wrapped;
+ });
  // Works with private as well as public PF1 ActionUse classes. No prototype
  // monkey-patching or dependency on undocumented global exports.
  Hooks.on('pf1CreateActionUse',use=>{
