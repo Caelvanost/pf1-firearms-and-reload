@@ -462,6 +462,28 @@ context.globalThis=context;vm.createContext(context);vm.runInContext(code,contex
  assert.equal(api.misfire.inspect(asMisfireUse(2)).status,'misfire');
  assert.equal(api.misfire.inspect(asMisfireUse(3)).status,'clear');
  assert.equal(api.misfire.inspect(asMisfireUse(20)).status,'clear');
+
+ // The system's real pf1AttackRoll hook supplies the evaluated attack
+ // Roll before it is transformed to a chat card. Capture the actual
+ // natural d20 only while the correct weapon is firing.
+ const hookUse=asMisfireUse(2);
+ hookUse.item=weapon;
+ weapon.name='Pistolet à double canon';
+ weapon.system.description={value:'Misfire 1–2 (5 ft.); Capacity 2'};
+ context.hookUse=hookUse;
+ vm.runInContext("RL_FIRING.add(weapon.uuid)",context);
+ const hookAction={id:'shot',parent:weapon,actionType:'rwak',hasAttack:true};
+ events.callAll('pf1AttackRoll',hookAction,asRoll(2),{});
+ const tracked=api.misfire.inspect({...hookUse,shared:{chatAttacks:[]}});
+ assert.equal(tracked.status,'misfire',
+  'pf1AttackRoll hook captures a natural 2 without chatAttacks layout');
+ assert.equal(tracked.misfires[0].natural,2);
+ vm.runInContext("RL_FIRING.delete(weapon.uuid); RL_MISFIRE_ROLLS.delete(weapon.uuid)",context);
+ events.callAll('pf1AttackRoll',hookAction,asRoll(1),{});
+ assert.equal(api.misfire.inspect({...hookUse,shared:{chatAttacks:[]}}).status,
+  'unresolved','unrelated attacks never supply a stale misfire');
+ weapon.name='w';
+
  const unresolved=asMisfireUse(2);
  unresolved.shared.chatAttacks[0].attack.roll={total:2};
  assert.equal(api.misfire.inspect(unresolved).status,'unresolved',
