@@ -72,3 +72,11 @@ The v0.1.1 Item.use-only hook missed PF1 action-sheet buttons. This version also
 ## v0.1.3 — Native ActionUse dialog guard
 
 The v0.1.1 and v0.1.2 sheet-method wrappers were insufficient in real-world testing. This release adds a more direct `pf1CreateActionUse` integration: recognized non-attack Reload actions receive `shared.skipDialog=true`, and their own `process()` is invoked with `skipDialog:true`. Other uses are untouched. This is an experimental update; verify the actual behavior in Foundry.
+
+## Automatic Reload action creation (v0.2.0)
+
+When a GM opens a world, PF1 Firearms & Reload now scans existing actor-owned weapons and automatically creates a **native non-attack** `Recharger` action on supported crossbows and early firearms that do not already have one. Newly created/updated weapon Items are handled as well. This is built using PF1's native Action component API, not a character feat; existing manually configured Reload actions are kept unchanged.
+
+Default action economy (before feats, cartridges and special rules): **light/hand crossbow: move; heavy crossbow: full; early one-handed pistol: standard; early two-handed musket/blunderbuss: full**. Each activation reloads one chamber under the existing first-stage engine. Unrecognized/exotic, repeating and advanced firearms are intentionally excluded until their correct magazine and action rules have dedicated handling; we do not insert incorrect actions. Rapid Reload and cartridge adjustments are also a follow-up feature.
+
+The UI's separate native PF1 action-use dialog remains a known live-testing issue despite experimental bypass attempts in v0.1.1–0.1.3; this release adds actions, but does **not** claim that the popup is resolved in all sheet variants.
