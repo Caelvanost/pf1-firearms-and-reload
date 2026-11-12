@@ -1,3 +1,10 @@
+## 0.3.1 — Read the natural d20 directly from PF1 attack rolls
+
+- Fix `unresolved` misfire diagnostics caused by reading the wrong PF1 v11.11 chat-card roll structure.
+- Capture evaluated native attack rolls through `pf1AttackRoll(action, roll, context)` while the associated firearm is actively firing; use the natural d20 die face rather than the modified total.
+- Preserve the previous conservative parser as a fallback, isolate simultaneous weapon rolls by UUID, and clear captured rolls after completion or errors.
+- No automatic broken condition, explosion, damage or repair is applied yet. Live Foundry validation is still required.
+
 ## 0.3.0 — Long-feu: phase 1 (experimental)
 
 - Recognize firearms with an explicit **Misfire / Long feu 1–N** value in their descriptions, distinguishing early and advanced firearms conservatively.
