@@ -118,3 +118,7 @@ The possible results are `misfire`, `clear`, `unconfigured` or `unresolved`. Thi
 ## v0.3.1 — Native PF1 attack roll hook
 
 For live PF1 11.11 misfire detection, this version listens to `pf1AttackRoll`, which exposes the evaluated native D20RollPF directly. This avoids relying on `shared.chatAttacks` whose shape differed from the phase-one test mocks. Check `game.modules.get('pf1-firearms-and-reload').api.reload.misfire.lastDiagnostic()` after a firearm attack. Misfire warnings are observational only; no broken state, explosion or damage automation is implemented in this test release.
+
+## v0.3.2 — Origin flag for a firearm broken by misfire
+
+When a **verified first** firearm misfire occurs, the module updates the weapon once with native PF1 `system.broken=true` and the permanent module flag `flags.pf1-firearms-and-reload.misfire=true`. This flag distinguishes a misfire-broken gun from an item broken due to ordinary damage. The future repair ability can test `weapon.getFlag("pf1-firearms-and-reload","misfire") === true` before removing the flag and native broken status. No repair automation or subsequent-misfire explosion behavior is implemented here.
