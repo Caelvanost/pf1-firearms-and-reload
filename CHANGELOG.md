@@ -1,3 +1,11 @@
+## 0.3.2 — Broken firearm misfire origin flag (experimental)
+
+- On first **confirmed** natural-d20 long feu, mark the weapon with PF1's native `system.broken=true` and persistent `flags.pf1-firearms-and-reload.misfire=true` in one Item update.
+- Flag records **why** this weapon became broken. A broken weapon from another cause does not receive the misfire origin flag.
+- Future item/ability scripts can read `weapon.getFlag('pf1-firearms-and-reload','misfire')===true` and, after valid repair, clear both the flag and `system.broken`.
+- No automatic repair, flag clearing, explosion, damage or second-misfire resolution in this version.
+- Preserve all reload, native ammunition and chooser behaviors.
+
 ## 0.3.1 — Read the natural d20 directly from PF1 attack rolls
 
 - Fix `unresolved` misfire diagnostics caused by reading the wrong PF1 v11.11 chat-card roll structure.
