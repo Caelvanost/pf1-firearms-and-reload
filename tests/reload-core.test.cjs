@@ -445,6 +445,35 @@ context.globalThis=context;vm.createContext(context);vm.runInContext(code,contex
  assert.equal(await api.ensureReloadAction(existing),false,
   'never override an existing custom Reload action');
  assert.equal(existing.actions[1].activation.type,'move');
+ // Misfire phase 1: evaluate the NATURAL d20, never the modified total.
+ // The module deliberately only reports an incident; no permanent weapon
+ // modification or automatic explosion without verified PF1 roll data.
+ const firearm={...weapon,name:'Pistolet à double canon',system:{
+  ...weapon.system,description:{value:'Misfire 1–2 (5 ft.); Capacity 2'}}};
+ assert.equal(api.misfire.profile(firearm).base,2);
+ assert.equal(api.misfire.profile(firearm).category,'early');
+ const asRoll=natural=>({
+  total:natural+12,dice:[{faces:20,results:[{result:natural,active:true}]}]
+ });
+ const asMisfireUse=natural=>({item:firearm,action:{
+  id:'shot',actionType:'rwak',hasAttack:true},
+  shared:{chatAttacks:[{attack:{roll:asRoll(natural)}}]}});
+ assert.equal(api.misfire.inspect(asMisfireUse(1)).status,'misfire');
+ assert.equal(api.misfire.inspect(asMisfireUse(2)).status,'misfire');
+ assert.equal(api.misfire.inspect(asMisfireUse(3)).status,'clear');
+ assert.equal(api.misfire.inspect(asMisfireUse(20)).status,'clear');
+ const unresolved=asMisfireUse(2);
+ unresolved.shared.chatAttacks[0].attack.roll={total:2};
+ assert.equal(api.misfire.inspect(unresolved).status,'unresolved',
+  'attack total must never be mistaken for natural die face');
+ const badWeapon={...firearm,system:{description:{value:'Capacity 2'}}};
+ assert.equal(api.misfire.profile(badWeapon).known,false,
+  'unknown misfire threshold cannot silently use a guessed default');
+ const crossbow={...firearm,name:'Arbalète légère'};
+ assert.equal(api.misfire.inspect({...asMisfireUse(1),item:crossbow}).status,
+  'not-firearm','crossbows are never misfire candidates');
+ const advanced={...firearm,name:'Revolver'};
+ assert.equal(api.misfire.profile(advanced).category,'advanced');
  assert.equal(typeof api.timing,'undefined','action economy belongs to native Reload');
  assert.ok(seenEvents.frReload>0&&seenEvents.frShot>0&&seenEvents.frUnload>0);
  assert.equal(seenEvents.frReload,seenEvents.oldReload,
