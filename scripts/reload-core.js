@@ -404,25 +404,21 @@ function rlInfer(weapon){
 // Native PF1 Action data is used; no independent feat is added to the actor.
 const RL_ACTION_BUILDING=new Set();
 function rlReloadProfile(weapon){
- if(weapon?.type!=='weapon'||!rlActor(weapon)||!rlAttackActions(weapon).length)
-  return null;
- const name=String(weapon.name??'').toLowerCase();
- const ammoTypes=[...new Set(rlAttackActions(weapon).map(a=>a.ammo.type))];
- if(ammoTypes.length!==1)return null;
- const ammoType=ammoTypes[0];
+ if(weapon?.type!=='weapon'||!rlActor(weapon))return null;
+ const name=String(weapon.name??'').toLowerCase().trim();
+ // Compendium weapons can contain a perfectly valid native "Attack" action
+ // with ammo.type=null, ammo.cost=0, or no generated action at all until
+ // edited. These are NOT grounds to omit a weapon-owned Reload action.
+ // Determine reloading from a recognized weapon identity, not ammo config.
+ // Never guess unusual magazine/repeating mechanisms.
  if(/(?:repeating|répétition|repetition|pepperbox|pepper-box|revolver|rifle|fusil à répétition)/i.test(name))
   return null;
  if(/(?:arbalète|arbalete|crossbow)/i.test(name)){
-  if(!['bolt','repeatingBolt'].includes(ammoType))return null;
-  if(ammoType==='repeatingBolt')return null; // magazine/lever rules differ
   if(/(?:lourde|heavy)/i.test(name))return {base:'full',kind:'heavy-crossbow'};
   if(/(?:légère|legere|light|de poing|hand)/i.test(name))
    return {base:'move',kind:'light-or-hand-crossbow'};
-  return null; // avoid guessing for exotic crossbows
+  return null;
  }
- if(ammoType!=='gunBullet'&&ammoType!=='dragoonBullet')return null;
- // Early firearms: one standard action for a one-handed gun, one full-round
- // action for a two-handed gun. Each barrel is loaded separately.
  if(/(?:mousquet|musket|blunderbuss|tromblon)/i.test(name))
   return {base:'full',kind:'early-two-handed-firearm'};
  if(/(?:pistolet|pistol)/i.test(name))
@@ -435,9 +431,11 @@ async function rlEnsureReloadAction(weapon){
  if(!profile||rlActions(weapon).some(a=>rlReloadName(a?.name)))return false;
  const key=weapon.uuid;
  if(!key||RL_ACTION_BUILDING.has(key))return false;
- const Action=globalThis.pf1?.models?.components?.Action;
+ const Action=globalThis.pf1?.models?.components?.Action??
+  globalThis.pf1?.components?.Action??globalThis.pf1?.components?.ItemAction;
  if(typeof Action?.create!=='function'){
-  console.warn('[PF1FR][Reload] Native PF1 Action.create unavailable; cannot generate action.',weapon.name);
+  console.warn('[PF1FR][Reload] Native PF1 Action.create unavailable; cannot generate action.',
+   {weapon:weapon.name,uuid:weapon.uuid,apiAvailable:!!globalThis.pf1?.models?.components});
   return false;
  }
  RL_ACTION_BUILDING.add(key);
@@ -451,6 +449,7 @@ async function rlEnsureReloadAction(weapon){
    ammo:{type:null,cost:0}
   },{parent:weapon});
   const action=Array.isArray(created)?created[0]:created;
+  if(!action)throw Error('PF1 Action.create returned no created Action.');
   console.info('[PF1FR][Reload] Created native Reload action',weapon.name,
    profile.kind,profile.base,action?.id);
   return !!action;
@@ -753,6 +752,18 @@ Hooks.once('ready',async()=>{
   configure:rlConfigure,reload:rlReload,unload:rlUnload,
   infer:rlInfer,initialize:rlAutoConfigure,
    ensureReloadAction:rlEnsureReloadAction,reloadProfile:rlReloadProfile,
+   diagnoseAutoAction:weapon=>({
+    name:weapon?.name??null,uuid:weapon?.uuid??null,
+    actor:rlActor(weapon)?.name??null,profile:rlReloadProfile(weapon),
+    actions:rlActions(weapon).map(a=>({
+     id:a?.id,name:a?.name,actionType:a?.actionType,hasAttack:a?.hasAttack,
+     ammoType:a?.ammo?.type,ammoCost:a?.ammo?.cost
+    })),
+    alreadyHasReload:rlActions(weapon).some(a=>rlReloadName(a?.name)),
+    gm:!!game.user?.isGM,allowed:rlAllowed(),
+    nativeActionApi:typeof (globalThis.pf1?.models?.components?.Action??
+     globalThis.pf1?.components?.Action??globalThis.pf1?.components?.ItemAction)?.create
+   }),
   lastDiagnostic:()=>RL_LAST?{...RL_LAST}:null,
   ammoDiagnostic:rlAmmoDiagnostic
  });
