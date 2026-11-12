@@ -114,3 +114,7 @@ console.log(game.modules.get('pf1-firearms-and-reload').api.reload.misfire.lastD
 ```
 
 The possible results are `misfire`, `clear`, `unconfigured` or `unresolved`. This deliberately **does not** yet set PF1's broken condition, destroy a weapon, cancel damage, resolve scatter attacks or roll an explosion. Do not treat this first phase as complete automated long-feu rules. It is the safe instrumentation stage for verifying PF1 v11.11's actual roll data and adding those consequences in subsequent releases.
+
+## v0.3.1 — Native PF1 attack roll hook
+
+For live PF1 11.11 misfire detection, this version listens to `pf1AttackRoll`, which exposes the evaluated native D20RollPF directly. This avoids relying on `shared.chatAttacks` whose shape differed from the phase-one test mocks. Check `game.modules.get('pf1-firearms-and-reload').api.reload.misfire.lastDiagnostic()` after a firearm attack. Misfire warnings are observational only; no broken state, explosion or damage automation is implemented in this test release.
