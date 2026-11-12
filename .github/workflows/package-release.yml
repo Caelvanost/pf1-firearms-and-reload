@@ -1,6 +1,7 @@
 name: Package and Publish Foundry Module
 
 on:
+  pull_request:
   workflow_dispatch:
   push:
     tags:
