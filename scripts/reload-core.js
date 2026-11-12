@@ -329,6 +329,7 @@ function rlDeny(use,result){
  * as die faces. No broken flag, weapon deletion or explosion in this phase.
  */
 const RL_MISFIRE_SEEN=new WeakSet();
+const RL_MISFIRE_ROLLS=new Map();
 let RL_MISFIRE_LAST=null;
 function rlMisfireProfile(weapon){
  if(weapon?.type!=='weapon')return null;
@@ -366,6 +367,13 @@ function rlNaturalD20(roll){
  return active[0].result;
 }
 function rlMisfireRolls(use){
+ // PF1's pf1AttackRoll hook supplies the evaluated d20 at roll time,
+ // independent of chat-card layout. Collect all attacks for this firing.
+ const tracked=RL_MISFIRE_ROLLS.get(use?.item?.uuid);
+ if(Array.isArray(tracked)&&tracked.length){
+  // A single unrecognizable roll must fail closed: no partial conclusions.
+  return tracked.slice();
+ }
  const entries=use?.shared?.chatAttacks;
  if(!Array.isArray(entries))return null;
  return entries.map(entry=>{
@@ -390,6 +398,20 @@ function rlInspectMisfire(use){
  const misfires=rolls.map((natural,index)=>({index,natural,misfire:natural<=threshold}));
  return {status:misfires.some(r=>r.misfire)?'misfire':'clear',
   profile,threshold,misfires};
+}
+function rlOnNativeAttackRoll(action,roll){
+ if(!rlAllowed())return;
+ const item=action?.parent?.type==='weapon'?action.parent:
+  (action?.item?.type==='weapon'?action.item:null);
+ const id=item?.uuid;
+ if(!id||!RL_FIRING.has(id))return;
+ if(!rlMisfireProfile(item)?.supported)return;
+ const result=rlNaturalD20(roll);
+ const existing=RL_MISFIRE_ROLLS.get(id)??[];
+ existing.push(result);
+ RL_MISFIRE_ROLLS.set(id,existing);
+ console.debug('[PF1FR][Misfire] Native PF1 attack roll captured',
+  {weapon:item.name,natural:result,rolls:existing.length});
 }
 function rlTrackMisfire(use){
  if(!rlAllowed()||RL_MISFIRE_SEEN.has(use))return;
@@ -435,6 +457,7 @@ async function rlCommitShot(use){
  }finally{
   RL_SHOTS.delete(use);
   RL_FIRING.delete(weapon?.uuid);
+  RL_MISFIRE_ROLLS.delete(weapon?.uuid);
  }
 }
 // Automatic but conservative PF1 weapon inference. Capacity is generally
@@ -816,6 +839,7 @@ function rlInstallInstantUse(){
  return installed>0;
 }
 function rlInstall(){
+ Hooks.on('pf1AttackRoll',rlOnNativeAttackRoll);
  // The actual PF1 dialog is created by ActionUse.process({skipDialog}).
  // PF1 constructs the ActionUse before processing and exposes that instance
  // through pf1CreateActionUse, independent of the sheet click handler.
@@ -869,12 +893,14 @@ function rlInstall(){
    if(check.managed){
     if(!check.ok){rlDeny(this,check);return;}
     RL_SHOTS.set(this,check);
+    RL_MISFIRE_ROLLS.delete(this.item.uuid);
     RL_FIRING.add(this.item.uuid);
    }
    try{return await original.apply(this,args)}
    catch(error){
     RL_SHOTS.delete(this);
     RL_FIRING.delete(this.item?.uuid);
+    RL_MISFIRE_ROLLS.delete(this.item?.uuid);
     throw error;
    }
   };
@@ -887,6 +913,7 @@ function rlInstall(){
   if(RL_DENIED.has(use)){
    RL_DENIED.delete(use);
    RL_FIRING.delete(use?.item?.uuid);
+   RL_MISFIRE_ROLLS.delete(use?.item?.uuid);
    return false;
   }
  });
