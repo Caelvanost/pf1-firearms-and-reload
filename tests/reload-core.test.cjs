@@ -68,9 +68,10 @@ weapon.actions.push(simple,double);
 class NativeItemUseStub { use(options={}){return {called:true,options,owner:this}} }
 class NativeActionUseStub {
  constructor(item,id,name,hasAttack=false){
-  this.item=item;this.id=id;this.name=name;this.hasAttack=hasAttack;
+  // Real PF1 v11.11 ItemAction exposes parent; it need not have .item.
+  this.parent=item;this.id=id;this.name=name;this.hasAttack=hasAttack;
  }
- use(options={}){return this.item.use({...options,actionId:this.id})}
+ use(options={}){return this.parent.use({...options,actionId:this.id})}
 }
 NativeActionUseStub.create=actionType.create;
 const context={console,Math,Number,Map,Set,WeakMap,WeakSet,Symbol,
@@ -206,11 +207,16 @@ context.globalThis=context;vm.createContext(context);vm.runInContext(code,contex
   {id:'shot-direct',name:'Tir simple',hasAttack:true,actionType:'rwak'}
  ]);
  const clickReload=new NativeActionUseStub(nativeWeapon,'reload-direct','Recharger');
+ assert.equal(clickReload.item,undefined,
+  'legacy ItemAction has parent, not item');
  const clicked=clickReload.use({rollMode:'blindroll'});
  assert.equal(clicked.options.skipDialog,true,
   'PF1 character-sheet Action.use must bypass native Reload dialog');
  assert.equal(clicked.options.rollMode,'blindroll',
   'PF1 Action.use preserves the requested chat roll mode');
+ const clickFrench=new NativeActionUseStub(nativeWeapon,'reload-direct','Recharger');
+ assert.equal(clickFrench.use().options.skipDialog,true,
+  'legacy French Reload action is direct too');
  const clickAttack=new NativeActionUseStub(nativeWeapon,'shot-direct','Tir simple',true);
  assert.equal(clickAttack.use().options.skipDialog,undefined,
   'PF1 character-sheet attack Action.use retains dialog');
