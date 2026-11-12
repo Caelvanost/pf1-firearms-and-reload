@@ -9,10 +9,10 @@ const source=fs.readFileSync(new URL("../scripts/reload-core.js",import.meta.url
 test("the new reload engine refuses ownership while unmodified PF1AE is active",()=>{
  const mods=new Map([
   ["pf1-firearms-and-reload",{active:true,api:{}}],
-  ["pf1-automation-engine",{active:true,api:{}}]
+  ["pf1-automation-engine",{active:true,api:{},esmodules:["scripts/reload-core.js"]}]
  ]);
  const context={
-  game:{modules:mods,settings:{get:(namespace,key)=>namespace==="pf1-firearms-and-reload"&&key==="reloadEnabled"}},
+  game:{modules:mods},
   Hooks:{once(){}},console,
   Set,WeakMap,WeakSet
  };
@@ -20,9 +20,12 @@ test("the new reload engine refuses ownership while unmodified PF1AE is active",
  vm.runInContext(source,context);
  assert.equal(vm.runInContext("rlAllowed()",context),false,
   "No duplicate manager even if both modules are enabled");
- mods.get("pf1-automation-engine").api.reloadDelegated=true;
+ mods.get("pf1-automation-engine").esmodules=["scripts/reload-adapter.js"];
  assert.equal(vm.runInContext("rlAllowed()",context),true,
-  "Only a PF1AE adapter that declares removal of the old hooks unlocks ownership");
+  "Only an adapter-only PF1AE manifest unlocks ownership");
+ mods.get("pf1-automation-engine").api.reloadDelegated=true;
+ mods.get("pf1-automation-engine").esmodules=["scripts/reload-core.js"];
+ assert.equal(vm.runInContext("rlAllowed()",context),false,"legacy hooks defeat a forged delegation marker");
  delete mods.get("pf1-automation-engine").api.reloadDelegated;
  mods.get("pf1-automation-engine").active=false;
  assert.equal(vm.runInContext("rlAllowed()",context),true,
