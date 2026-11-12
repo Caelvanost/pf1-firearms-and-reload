@@ -38,5 +38,5 @@ test("Foundry manifest includes only the new core and migration is imported",()=
  assert.equal(manifest.id,"pf1-firearms-and-reload");
  assert.deepEqual(manifest.esmodules,["scripts/reload-core.js"]);
  assert.match(fs.readFileSync(new URL("../scripts/reload-core.js",import.meta.url),"utf8"),
-  /import \{ migrateLegacyReload, migrateLegacySetting \} from "\.\/migration\.js"/);
+  /import \{ migrateLegacyReload \} from "\.\/migration\.js"/);
 });
