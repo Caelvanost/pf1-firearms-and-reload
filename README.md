@@ -47,7 +47,7 @@ A draft PF1AE 1.24.6 branch removes `reload-core.js` from `esmodules` and instal
 
 ## Automatic operation
 
-Enable **PF1 Firearms & Reload** in Foundry's *Manage Modules*. No additional setting is required or provided. The Reload/Chargement widget and native Reload actions are available automatically for supported weapons. Pair it with an updated PF1AE whose manifest replaces `scripts/reload-core.js` with `scripts/reload-adapter.js`; older active PF1AE versions must be upgraded or disabled to avoid double processing. The old PF1AE `reloadEnabled` preference is not read or copied. Per-weapon legacy states are still migrated.
+Enable **PF1 Firearms & Reload** in Foundry's *Manage Modules*. No additional setting is required or provided. The Reload/Chargement widget and native Reload actions are available automatically for supported weapons. Clicking an unambiguous non-attack **Recharger / Reload** action now runs PF1's own ItemPF.use with `skipDialog: true`, bypassing the handedness/roll-mode configuration dialog. Normal attacks, unrelated actions and ambiguous feat-based Reload actions retain their native dialogs; native action scripts and inventory consumption are unchanged. Pair it with an updated PF1AE whose manifest replaces `scripts/reload-core.js` with `scripts/reload-adapter.js`; older active PF1AE versions must be upgraded or disabled to avoid double processing. The old PF1AE `reloadEnabled` preference is not read or copied. Per-weapon legacy states are still migrated.
 
 ## Concurrency and safety note
 
@@ -60,3 +60,7 @@ The standalone engine emits its own `pf1frReload`, `pf1frReloadShot`, `pf1frRelo
 ### Development ZIPs
 
 The pull request packaging workflow publishes a **temporary GitHub Actions artifact**, not a GitHub Release. The future tag-only release workflow validates that `module.json` refers to the exact versioned ZIP asset before publishing. Both modules must be updated together and tested on a copy of the world; the old PF1AE reload engine is deliberately excluded from the future PF1AE package.
+
+## Instant Reload action (v0.1.1)
+
+The module automatically detects a non-attack `Recharger` or `Reload` action on a weapon (and a standalone Reload feat when there is exactly one eligible weapon). It calls the **same native PF1 Item.use action**, using the original `actionId` and any supplied roll mode, but sets `skipDialog: true`. This removes the action-usage pop-up without changing attack handling, ammunition deduction, or the existing Reload post-use hook. There is no new world setting. If the action could resolve to multiple weapons, the native dialog remains instead of guessing.
