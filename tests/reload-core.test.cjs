@@ -5,6 +5,7 @@ const path=require('node:path');
 const vm=require('node:vm');
 const code=fs.readFileSync(path.resolve(__dirname,'../scripts/reload-core.js'),'utf8').replace(/^import .*migration\.js.*\n/m,'');
 const domHandlers=[];
+const createdMessages=[];
 const listeners=new Map(),once=new Map(),settings=new Map([
  ['genericEnabled',true],['reloadEnabled',true]]);
 const count={rolls:0,charges:0,nativeAmmo:0,messages:0,warns:0,dialogs:0};
@@ -84,7 +85,12 @@ class NativeActionUseStub {
  use(options={}){return this.parent.use({...options,actionId:this.id})}
 }
 NativeActionUseStub.create=actionType.create;
-const context={console,Math,Number,Map,Set,WeakMap,WeakSet,Symbol,
+class ExplosionTestRoll {
+ constructor(formula){this.formula=formula;this.total=7}
+ async evaluate(){count.explosionRolls=(count.explosionRolls??0)+1;return this}
+ async render(){return '<div class="dice-roll">7</div>'}
+}
+const context={console,Math,Number,Map,Set,WeakMap,WeakSet,Symbol,Roll:ExplosionTestRoll,
  structuredClone,globalThis:null,foundry:{applications:{instances:new Map()},utils:{deepClone:structuredClone,
  escapeHTML:x=>x}},game:{user:{isGM:true},actors:{contents:[actor]},scenes:{contents:[]},modules:new Map([[
  'pf1-firearms-and-reload',{active:true,api:{}}]]),
@@ -94,7 +100,7 @@ const context={console,Math,Number,Map,Set,WeakMap,WeakSet,Symbol,
   if(name==='click'&&capture===true)domHandlers.push(fn);
  }},
  Hooks:events,ui:{windows:{},notifications:{warn(){count.warns++},info(){},error(){}}},
- ChatMessage:{getSpeaker:()=>({}),async create(){count.messages++}},
+ ChatMessage:{getSpeaker:()=>({}),async create(data){count.messages++;createdMessages.push(data)}},
  pf1:{models:{components:{Action:actionType}},components:{ActionUse,ItemAction:NativeActionUseStub}},
 };
 context.CONFIG={Item:{documentClass:NativeItemUseStub}};
@@ -401,7 +407,7 @@ context.globalThis=context;vm.createContext(context);vm.runInContext(code,contex
  // Reproduce the ACTUAL PF1 v11.11 ActionSelector popup from the player's
  // screenshot: div.action[data-action=click], img alt=Reload, parent form
  // id=ActionSelector-Actor-a-Item-none. This is not ItemAction.use.
- assert.equal(domHandlers.length,1,'install a capture-phase chooser click handler');
+ assert.equal(domHandlers.length,2,'install chooser and explosion capture-phase click handlers');
  const selected=noAction.actions[0];
  let used=null, chooserClosed=0;
  noAction.use=async options=>{used=options;return options};
@@ -525,7 +531,19 @@ context.globalThis=context;vm.createContext(context);vm.runInContext(code,contex
  // A verified explosion must mark the weapon unusable without deleting
  // its Item, preserve the existing misfire origin flag and notify the GM.
  const messagesBeforeExplosion=count.messages;
- await vm.runInContext('rlTrackMisfire',context)(second(5));
+ const damageRollsBefore=count.explosionRolls??0;
+ const explosionUse=second(5);
+ explosionUse.action.damage={parts:[['1d8','piercing']]};
+ assert.equal(api.misfire.explosionDamageFormula(weapon,explosionUse.action),
+  '(1d8)','weapon native PF1 action supplies explosion formula');
+ await vm.runInContext('rlTrackMisfire',context)(explosionUse);
+ assert.equal(count.explosionRolls,damageRollsBefore+1,
+  'one and only one explosion damage roll is made automatically');
+ const explosionCard=createdMessages.at(-1);
+ assert.match(explosionCard.content,/Jet de Réflexes DD 12/);
+ assert.match(explosionCard.content,/Appliquer les dégâts/);
+ assert.match(explosionCard.content,/Appliquer la moitié/);
+ assert.equal(explosionCard.flags['pf1-firearms-and-reload'].explosionDamage.total,7);
  assert.equal(weapon.flags.exploded,true,'explosion persisted on weapon Item');
  assert.equal(weapon.flags.explosionPending,true,'GM must resolve burst damage');
  assert.equal(weapon.flags.misfire,true,'repair origin flag preserved');

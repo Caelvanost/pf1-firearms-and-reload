@@ -1,8 +1,8 @@
 {
   "id": "pf1-firearms-and-reload",
   "title": "PF1 Firearms & Reload",
-  "description": "Experimental PF1 firearm misfire phase 2: broken misfire threshold and second-misfire explosion detection with persistent non-destructive unusable state.",
-  "version": "0.3.3",
+  "description": "Automatic firearm explosion damage roll and interactive Reflex DC 12, apply full and half damage card for PF1 v11.11.",
+  "version": "0.3.4",
   "authors": [
     {
       "name": "Caelvanost"
@@ -42,6 +42,6 @@
   "url": "https://github.com/Caelvanost/pf1-firearms-and-reload",
   "manifest": "https://raw.githubusercontent.com/Caelvanost/pf1-firearms-and-reload/main/module.json",
   "readme": "https://github.com/Caelvanost/pf1-firearms-and-reload/blob/main/README.md",
-  "download": "https://github.com/Caelvanost/pf1-firearms-and-reload/releases/download/v0.3.3/pf1-firearms-and-reload-v0.3.3.zip",
+  "download": "https://github.com/Caelvanost/pf1-firearms-and-reload/releases/download/v0.3.4/pf1-firearms-and-reload-v0.3.4.zip",
   "changelog": "https://github.com/Caelvanost/pf1-firearms-and-reload/blob/main/CHANGELOG.md"
 }

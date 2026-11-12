@@ -479,25 +479,141 @@ async function rlMarkExplosion(weapon,details){
  Hooks.callAll('pf1frFirearmExplosion',{weapon,...details});
  return true;
 }
-async function rlAnnounceExplosion(weapon,result,details){
+/**
+ * Select the *normal* damage formula of the firearm's native PF1 attack.
+ * Never guess from its name; a GM can explicitly override an unusual
+ * damage setup using the weapon's explosionDamageFormula module flag.
+ */
+function rlExplosionDamageFormula(weapon,action){
+ const override=weapon?.getFlag?.(RL_NS,'explosionDamageFormula');
+ if(typeof override==='string'&&override.trim())return override.trim();
+ const sources=[
+  action?.damage?.parts,action?.damage?.normal?.parts,
+  action?.damage?.normal,action?.damage?.damageParts,
+  weapon?.system?.damage?.parts
+ ];
+ for(const source of sources){
+  if(!Array.isArray(source)||!source.length)continue;
+  const parts=source.map(p=>typeof p==='string'?p:
+   Array.isArray(p)?p[0]:p?.formula??p?.value);
+  if(parts.length&&parts.every(p=>typeof p==='string'&&p.trim()))
+   return parts.map(p=>'('+p+')').join(' + ');
+ }
+ return null;
+}
+function rlExplosionTargets(){
+ const tokens=[...(globalThis.canvas?.tokens?.controlled??[])];
+ // As with PF1's native damage card, controlled tokens take precedence.
+ if(tokens.length)return [...new Map(tokens.filter(t=>t?.actor)
+  .map(t=>[t.actor.uuid,t.actor])).values()];
+ return [...new Map([...(game.user?.targets??[])].filter(t=>t?.actor)
+  .map(t=>[t.actor.uuid,t.actor])).values()];
+}
+const RL_EXPLOSION_APPLY_BUSY=new Set();
+const RL_EXPLOSION_APPLIED=new Set();
+function rlInstallExplosionChat(){
+ if(typeof document==='undefined'||typeof document.addEventListener!=='function')return;
+ document.addEventListener('click',event=>{
+  const button=event?.target?.closest?.(
+   '.pf1fr-explosion-card button[data-pf1fr-explosion]');
+  if(!button)return;
+  event.preventDefault();
+  event.stopPropagation();
+  const card=button.closest?.('.pf1fr-explosion-card');
+  const msgId=card?.dataset?.messageId??button.closest?.('[data-message-id]')?.dataset?.messageId
+   ??button.closest?.('.chat-message')?.dataset?.messageId;
+  const message=game.messages?.get?.(msgId);
+  const record=message?.getFlag?.(RL_NS,'explosionDamage');
+  if(!record||!Number.isSafeInteger(record.total)||record.total<0)return;
+  const targets=rlExplosionTargets();
+  if(!targets.length){
+   ui.notifications?.warn?.('Sélectionnez les tokens affectés par l’explosion.');
+   return;
+  }
+  const mode=button.dataset.pf1frExplosion;
+  if(!['save','full','half'].includes(mode))return;
+  void (async()=>{
+   for(const actor of targets){
+    // Saving throws are initiated by their owners, or by the GM.
+    if(mode==='save'){
+     if(!actor.isOwner&&!game.user?.isGM)continue;
+     if(typeof actor.rollSavingThrow==='function')
+      await actor.rollSavingThrow('ref',{dc:12,skipDialog:false});
+     continue;
+    }
+    if(!game.user?.isGM&&!actor.isOwner)continue;
+    const lock=message.id+':'+actor.uuid;
+    if(RL_EXPLOSION_APPLIED.has(lock)||RL_EXPLOSION_APPLY_BUSY.has(lock)){
+     ui.notifications?.warn?.('Dégâts déjà appliqués à '+actor.name+
+      ' pour cette explosion.');
+     continue;
+    }
+    RL_EXPLOSION_APPLY_BUSY.add(lock);
+    try{
+     const value=mode==='half'?Math.floor(record.total/2):record.total;
+     if(typeof actor.applyDamage!=='function')throw Error('PF1 actor.applyDamage unavailable');
+     const outcome=await actor.applyDamage(value);
+     if(outcome===false)throw Error('PF1 damage application was cancelled');
+     RL_EXPLOSION_APPLIED.add(lock);
+    }finally{RL_EXPLOSION_APPLY_BUSY.delete(lock)}
+   }
+  })().catch(error=>{
+   console.error('[PF1FR][Explosion] Chat card action failed',error);
+   ui.notifications?.error?.('Échec du jet ou de l’application des dégâts.');
+  });
+ },true);
+}
+async function rlAnnounceExplosion(weapon,result,use){
  if(typeof ChatMessage?.create!=='function')return;
  const radius=result.profile?.burstRadius;
  const radiusLabel=radius!=null
   ?radius+' '+(result.profile.burstUnit==='m'?'m':'ft')
-  :'rayon à vérifier dans la description de l’arme';
- const escape=globalThis.foundry?.utils?.escapeHTML??(x=>String(x));
- const message='<p><strong>Explosion d’arme à feu : '+
-  escape(weapon.name)+'</strong></p>'+
-  '<p>Rayon : '+escape(radiusLabel)+
-  '. Choisir un coin de la case du porteur comme origine.</p>'+
-  '<p>Chaque créature dans la zone subit les dégâts normaux de l’arme.'+
-  ' <strong>Réflexes DD 12 : moitié des dégâts.</strong></p>'+
-  '<p>Arme rudimentaire non magique : détruite ; magique : hors service'+
-  ' jusqu’à réparation complète. Résolution MJ requise.</p>';
- try{await ChatMessage.create({
-  speaker:ChatMessage.getSpeaker?.({actor:rlActor(weapon)})??{},
-  content:message
- })}catch(error){console.warn('[PF1FR][Misfire] Explosion chat notice failed',error)}
+  :'rayon non précisé : vérification MJ';
+ const esc=globalThis.foundry?.utils?.escapeHTML??(x=>String(x));
+ const action=use?.action;
+ const formula=rlExplosionDamageFormula(weapon,action);
+ let damageRoll=null;
+ let rollHtml='';
+ let damageInfo='Dégâts non calculés : renseigner le profil natif des dégâts de l’arme.';
+ const RollType=globalThis.Roll;
+ if(formula&&typeof RollType==='function'){
+  try{
+   damageRoll=await new RollType(formula,rlActor(weapon)?.getRollData?.()??{}).evaluate();
+   if(!Number.isSafeInteger(damageRoll.total)||damageRoll.total<0)
+    throw Error('Invalid rolled firearm damage');
+   rollHtml=typeof damageRoll.render==='function'
+    ?await damageRoll.render():'<strong>'+damageRoll.total+'</strong>';
+   damageInfo='Dégâts de l’explosion : '+damageRoll.total;
+  }catch(error){
+   damageRoll=null;
+   console.warn('[PF1FR][Explosion] Native damage roll unavailable',error);
+  }
+ }
+ const controls=damageRoll?
+  '<div class="pf1fr-explosion-controls" style="display:flex;gap:4px;flex-wrap:wrap">'+
+  '<button type="button" data-pf1fr-explosion="save">Jet de Réflexes DD 12</button>'+
+  '<button type="button" data-pf1fr-explosion="full">Appliquer les dégâts</button>'+
+  '<button type="button" data-pf1fr-explosion="half">Appliquer la moitié</button></div>':
+  '<p><strong>Dégâts manuels requis</strong> : formule introuvable.</p>';
+ const content='<section class="pf1fr-explosion-card">'+
+  '<h3>Explosion : '+esc(weapon.name)+'</h3>'+
+  '<p>Rayon : '+esc(radiusLabel)+' ; origine : coin de la case du porteur.'+
+  ' Réflexes DD 12 : moitié des dégâts.</p>'+
+  '<p>'+esc(damageInfo)+'</p>'+rollHtml+controls+
+  '<p><small>Choisissez les tokens à affecter ; le porteur est également exposé.'+
+  ' Le résultat de dégâts n’est pas relancé par les boutons.</small></p>'+
+  '</section>';
+ try{
+  await ChatMessage.create({
+   speaker:ChatMessage.getSpeaker?.({actor:rlActor(weapon)})??{},
+   content,
+   flags:{[RL_NS]:{
+    explosionDamage:damageRoll?{
+     total:damageRoll.total,formula,weaponUuid:weapon.uuid,dc:12
+    }:null
+   }}
+  });
+ }catch(error){console.warn('[PF1FR][Misfire] Explosion chat notice failed',error)}
 }
 async function rlTrackMisfire(use){
  if(!rlAllowed()||RL_MISFIRE_SEEN.has(use))return;
@@ -522,7 +638,7 @@ async function rlTrackMisfire(use){
      use,result,reflexDC:12,burstRadius:result.profile.burstRadius,
      burstUnit:result.profile.burstUnit
     });
-    if(exploded)await rlAnnounceExplosion(weapon,result);
+    if(exploded)await rlAnnounceExplosion(weapon,result,use);
    }
   }catch(error){
    RL_MISFIRE_LAST={...RL_MISFIRE_LAST,brokenApplied:applied,
@@ -1102,6 +1218,7 @@ Hooks.once('ready',async()=>{
    profile:rlMisfireProfile,inspect:rlInspectMisfire,
    isMarked:rlMisfireFlag,flagPath:'flags.'+RL_NS+'.misfire',
    isExploded:rlExploded,explodedFlagPath:'flags.'+RL_NS+'.exploded',
+   explosionDamageFormula:rlExplosionDamageFormula,
    lastDiagnostic:()=>RL_MISFIRE_LAST?{...RL_MISFIRE_LAST}:null
   }),
   lastDiagnostic:()=>RL_LAST?{...RL_LAST}:null,
@@ -1119,6 +1236,7 @@ Hooks.once('ready',async()=>{
  rlInstall();
  rlInstallInstantUse();
  rlInstallSelectorReload();
+ rlInstallExplosionChat();
  if(game.user?.isGM){
   Hooks.on('createItem',item=>{
    if(item?.type==='weapon')void rlEnsureReloadAction(item);
