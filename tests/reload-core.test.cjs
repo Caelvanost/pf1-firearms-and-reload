@@ -4,6 +4,7 @@ const fs=require('node:fs');
 const path=require('node:path');
 const vm=require('node:vm');
 const code=fs.readFileSync(path.resolve(__dirname,'../scripts/reload-core.js'),'utf8').replace(/^import .*migration\.js.*\n/m,'');
+const domHandlers=[];
 const listeners=new Map(),once=new Map(),settings=new Map([
  ['genericEnabled',true],['reloadEnabled',true]]);
 const count={rolls:0,charges:0,nativeAmmo:0,messages:0,warns:0,dialogs:0};
@@ -76,11 +77,14 @@ class NativeActionUseStub {
 NativeActionUseStub.create=actionType.create;
 const context={console,Math,Number,Map,Set,WeakMap,WeakSet,Symbol,
  structuredClone,globalThis:null,foundry:{utils:{deepClone:structuredClone,
- escapeHTML:x=>x}},game:{user:{isGM:true},modules:new Map([[
+ escapeHTML:x=>x}},game:{user:{isGM:true},actors:{contents:[actor]},scenes:{contents:[]},modules:new Map([[
  'pf1-firearms-and-reload',{active:true,api:{}}]]),
  settings:{get:(_ns,k)=>settings.get(k),register:(_ns,k,opt)=>{
   if(!settings.has(k))settings.set(k,opt.default)}}},
- Hooks:events,ui:{notifications:{warn(){count.warns++},info(){}}},
+ document:{addEventListener:(name,fn,capture)=>{
+  if(name==='click'&&capture===true)domHandlers.push(fn);
+ }},
+ Hooks:events,ui:{windows:{},notifications:{warn(){count.warns++},info(){},error(){}}},
  ChatMessage:{getSpeaker:()=>({}),async create(){count.messages++}},
  pf1:{models:{components:{Action:actionType}},components:{ActionUse,ItemAction:NativeActionUseStub}},
 };
@@ -384,6 +388,45 @@ context.globalThis=context;vm.createContext(context);vm.runInContext(code,contex
   'recognized weapon still gets Reload when native attack action is absent');
  assert.equal(noAction.actions[0].name,'Reload');
  assert.equal(noAction.actions[0].activation.type,'move');
+
+ // Reproduce the ACTUAL PF1 v11.11 ActionSelector popup from the player's
+ // screenshot: div.action[data-action=click], img alt=Reload, parent form
+ // id=ActionSelector-Actor-a-Item-none. This is not ItemAction.use.
+ assert.equal(domHandlers.length,1,'install a capture-phase chooser click handler');
+ const selected=noAction.actions[0];
+ let used=null, chooserClosed=0;
+ noAction.use=async options=>{used=options;return options};
+ actor.items.set(noAction.id,noAction);
+ const form={id:'ActionSelector-Actor-a-Item-none'};
+ context.ui.windows={1:{element:{contains:x=>x===form},
+  close:async()=>{chooserClosed++}}};
+ const selection=(label)=>{
+  const row={textContent:label,querySelector:()=>({
+   getAttribute:()=>label
+  }),closest:selector=>selector.startsWith('form[')?form:null};
+  const event={target:{closest:selector=>
+   selector==='.action[data-action="click"]'?row:null},
+   defaultPrevented:false,
+   preventDefault(){this.defaultPrevented=true},
+   stopImmediatePropagation(){this.stopped=true},
+   stopPropagation(){this.bubbled=false}};
+  domHandlers[0](event);
+  return event;
+ };
+ const attackEvent=selection('Attack');
+ assert.equal(attackEvent.defaultPrevented,false,
+  'PF1 Attack chooser selections retain their normal handler');
+ assert.equal(used,null);
+ const reloadEvent=selection('Reload');
+ await new Promise(r=>setImmediate(r));
+ assert.equal(reloadEvent.defaultPrevented,true,
+  'ActionSelector native Reload click is intercepted');
+ assert.equal(reloadEvent.stopped,true);
+ assert.equal(used.actionId,selected.id,'native action ID is preserved');
+ assert.equal(used.skipDialog,true,'no PF1 handedness/roll dialog after selection');
+ assert.equal(chooserClosed,1,'only relevant chooser closes');
+ actor.items.delete(noAction.id);
+
  const existing={id:'manual',uuid:'Actor.a.Item.manual',actor,type:'weapon',
   name:'Pistolet',actions:[{id:'fire',hasAttack:true,actionType:'rwak',
    ammo:{type:'gunBullet',cost:1}},{id:'existing',name:'Recharger',
