@@ -1,0 +1,48 @@
+{
+  "PF1FR": {
+    "Reload": {
+      "Action": "Reload",
+      "Empty": "Weapon is not sufficiently loaded.",
+      "Insufficient": "Not enough ammunition in the inventory to reload.",
+      "OutOfCapacity": "Weapon capacity exceeded.",
+      "Reloaded": "Weapon reloaded: {loaded}/{capacity}.",
+      "Blocked": "Attack blocked: {loaded} loaded, {needed} required.",
+      "AoO": "Reloading normally provokes an attack of opportunity.",
+      "Missing": "Weapon or ammunition is unavailable.",
+      "Unconfigured": "Reload tracking is not configured for this weapon.",
+      "Loaded": "Loaded ammunition: {loaded}/{capacity}",
+      "Unload": "Unload",
+      "Configure": "Configure reload",
+      "Capacity": "Capacity",
+      "Ammo": "Ammunition",
+      "Count": "Required projectiles",
+      "Save": "Save",
+      "Shots": "Attack action (optional)",
+      "Base": "Base reload action",
+      "SettingsHint": "Opt-in tracking for configured firearms and crossbows. Native PF1 continues to consume ammunition. Requires manual per-weapon configuration; disabled by default.",
+      "SettingsName": "Automatic weapon reload tracking (experimental)",
+      "SelectAmmo": "Choose inventory ammunition",
+      "SelectAction": "Choose an attack action (optional)",
+      "NoAmmo": "No native ammunition Item found in this actor's inventory. Add an Item of type Ammunition (ammo), not a general loot object.",
+      "NoActions": "This weapon has no native attack actions. Create an attack action in its PF1 Actions tab first.",
+      "NoNativeAmmo": "The weapon's ranged attack has no native ammunition type. Configure its ammunition type in the native PF1 action before saving.",
+      "NativeMismatch": "The selected ammunition type does not match the native PF1 ranged attack. Set the attack's Ammo Type to the matching ammunition subtype first.",
+      "Help": "Select the ammo Item and optionally an attack requiring multiple shots. Native attack ammunition types must match.",
+      "TimeFree": "Free action",
+      "TimeMove": "Move action",
+      "TimeStandard": "Standard action",
+      "TimeFull": "Full-round action",
+      "AutoUnavailable": "Unable to determine capacity or ammunition automatically",
+      "InitialStatus": "Click Reload to initialize loaded ammunition from the weapon's own data",
+      "ReloadFailed": "Reload failed",
+      "AmmoGuidance": "Check native PF1 Ammunition Items, their subtype and quantity. The Reload action must have ammunition set to None.",
+      "Loading": "Loading"
+    },
+    "Settings": {
+      "ReloadEnabled": {
+        "Name": "Automatic weapon reload tracking (experimental)",
+        "Hint": "Opt-in tracking for configured firearms and crossbows. Native PF1 continues to consume ammunition. Requires manual per-weapon configuration; disabled by default."
+      }
+    }
+  }
+}
