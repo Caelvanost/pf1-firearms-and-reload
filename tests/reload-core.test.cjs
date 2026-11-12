@@ -81,7 +81,7 @@ const context={console,Math,Number,Map,Set,WeakMap,WeakSet,Symbol,
   if(!settings.has(k))settings.set(k,opt.default)}}},
  Hooks:events,ui:{notifications:{warn(){count.warns++},info(){}}},
  ChatMessage:{getSpeaker:()=>({}),async create(){count.messages++}},
- pf1:{models:{components:{Action:NativeActionUseStub}},components:{ActionUse}},
+ pf1:{models:{components:{Action:actionType}},components:{ActionUse,ItemAction:NativeActionUseStub}},
 };
 context.CONFIG={Item:{documentClass:NativeItemUseStub}};
 context.migrateLegacyReload=async()=>({migrated:0});
@@ -214,6 +214,12 @@ context.globalThis=context;vm.createContext(context);vm.runInContext(code,contex
  const clickAttack=new NativeActionUseStub(nativeWeapon,'shot-direct','Tir simple',true);
  assert.equal(clickAttack.use().options.skipDialog,undefined,
   'PF1 character-sheet attack Action.use retains dialog');
+ // This test intentionally exposes only the PF1 11.11 ItemAction use()
+ // entry point, NOT the newer models.components.Action.use().
+ assert.equal(typeof context.pf1.models.components.Action.prototype?.use,'undefined');
+ assert.equal(context.pf1.components.ItemAction,NativeActionUseStub);
+ assert.equal(NativeActionUseStub.prototype.use.pf1frInstantReloadWrapped,true,
+  'old PF1 ItemAction.use is patched before the configuration dialog');
  const reloadInstant=nativeWeapon.use({actionId:'reload-direct',rollMode:'gmroll'});
  assert.equal(reloadInstant.options.skipDialog,true,'Reload is immediate');
  assert.equal(reloadInstant.options.rollMode,'gmroll','roll mode preserved');
