@@ -23,7 +23,7 @@ GM-only initial migration iterates world actors and accessible linked/unlinked s
 - Original PF1AE stores weapon locks in a client-local `Set`. This is **not a distributed transactional lock**, and simultaneous players/GM actions remain a race risk.
 - The source regression suite relies on a simulated PF1 ActionUse and **does not replace live Foundry v13.351 / PF1 v11.11 validation**.
 - Migration coordination by the lowest active GM ID avoids routine simultaneous runs but does not establish a distributed lock.
-- The historical `reloadEnabled` setting needs controlled migration/retirement when the PF1AE adapter is integrated.
+- The historical `reloadEnabled` world setting is copied once to the new namespace when accessible, with a `migrationSchema` marker. It is left intact for rollback. A disconnected/absent source setting is logged and not overwritten.
 - New API migration, compatibility adapter, acceptance tests and release publishing remain pending.
 
 ## Public API (preview)
@@ -40,3 +40,7 @@ await api?.unload(weapon, { count: 1 });
 ```
 
 Do not set `api.reloadDelegated` manually. That marker belongs exclusively to a future PF1AE version with its legacy engine physically removed.
+
+## Transition verification (development branch)
+
+A draft PF1AE 1.24.6 branch removes `reload-core.js` from `esmodules` and installs a compatibility-only `reload-adapter.js`. The standalone engine's ownership guard activates only when PF1AE is absent/inactive or its adapter sets `api.reloadDelegated === true`. Node tests exercise all three states. This is **not** proof of multiplayer atomicity or a live PF1 ActionUse regression test.
