@@ -40,7 +40,13 @@ const rlAllowed=()=>{
  if(game.modules.get(RL_NS)?.active!==true) return false;
  // Safe until PF1AE has been upgraded to a delegating compatibility adapter.
  const old=game.modules.get('pf1-automation-engine');
- if(old?.active && old.api?.reloadDelegated !== true) return false;
+ if(old?.active){
+  const scripts=Array.isArray(old.esmodules)?old.esmodules:null;
+  // Inspect manifest ownership as well as the ready-time bridge marker;
+  // Foundry may invoke the standalone ready handler before PF1AE's adapter.
+  if(scripts?.some(path=>String(path).endsWith('/reload-core.js'))) return false;
+  if(!scripts?.includes('scripts/reload-adapter.js') && old.api?.reloadDelegated!==true) return false;
+ }
  return true;
 };
 const rlActor=weapon=>weapon?.actor??(weapon?.parent?.documentName==='Actor'?weapon.parent:null);
