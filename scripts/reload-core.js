@@ -628,11 +628,11 @@ function rlInstallSelectorReload(){
   // Match the actual clicked form against the application's rendered DOM.
   // Keep the V1 fallback for older sheet integrations.
   const appV2=globalThis.foundry?.applications?.instances;
-  const candidates=[
+  const registeredApps=[
    ...(appV2 instanceof Map?appV2.values():[]),
    ...Object.values(ui.windows??{})
   ];
-  const chooser=candidates.find(app=>{
+  const chooser=registeredApps.find(app=>{
    const root=app?.element?.[0]??app?.element;
    return typeof app?.close==='function'&&
     (root===form||root?.contains?.(form)||app?.form===form);
