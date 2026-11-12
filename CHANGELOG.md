@@ -1,3 +1,5 @@
+- Always-on reload manager: removing the world enable/disable setting and its migration; only Foundry module activation controls operation.
+- Fail visibly and safely when an active legacy PF1AE still owns reload hooks.
 # Changelog
 
 ## 0.1.0-dev.0 (unreleased)
