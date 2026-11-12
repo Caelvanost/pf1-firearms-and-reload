@@ -63,6 +63,13 @@ const t=(id,cost=1)=>({id,name:id,item:weapon,actionType:'rwak',
 const simple=t('shot'),double=t('double');
 weapon.actions.push(simple,double);
 class NativeItemUseStub { use(options={}){return {called:true,options,owner:this}} }
+class NativeActionUseStub {
+ constructor(item,id,name,hasAttack=false){
+  this.item=item;this.id=id;this.name=name;this.hasAttack=hasAttack;
+ }
+ use(options={}){return this.item.use({...options,actionId:this.id})}
+}
+NativeActionUseStub.create=actionType.create;
 const context={console,Math,Number,Map,Set,WeakMap,WeakSet,Symbol,
  structuredClone,globalThis:null,foundry:{utils:{deepClone:structuredClone,
  escapeHTML:x=>x}},game:{user:{isGM:true},modules:new Map([[
@@ -71,7 +78,7 @@ const context={console,Math,Number,Map,Set,WeakMap,WeakSet,Symbol,
   if(!settings.has(k))settings.set(k,opt.default)}}},
  Hooks:events,ui:{notifications:{warn(){count.warns++},info(){}}},
  ChatMessage:{getSpeaker:()=>({}),async create(){count.messages++}},
- pf1:{models:{components:{Action:actionType}},components:{ActionUse}},
+ pf1:{models:{components:{Action:NativeActionUseStub}},components:{ActionUse}},
 };
 context.CONFIG={Item:{documentClass:NativeItemUseStub}};
 context.migrateLegacyReload=async()=>({migrated:0});
@@ -184,6 +191,15 @@ context.globalThis=context;vm.createContext(context);vm.runInContext(code,contex
   {id:'reload-direct',name:'Recharger',hasAttack:false,actionType:'other'},
   {id:'shot-direct',name:'Tir simple',hasAttack:true,actionType:'rwak'}
  ]);
+ const clickReload=new NativeActionUseStub(nativeWeapon,'reload-direct','Recharger');
+ const clicked=clickReload.use({rollMode:'blindroll'});
+ assert.equal(clicked.options.skipDialog,true,
+  'PF1 character-sheet Action.use must bypass native Reload dialog');
+ assert.equal(clicked.options.rollMode,'blindroll',
+  'PF1 Action.use preserves the requested chat roll mode');
+ const clickAttack=new NativeActionUseStub(nativeWeapon,'shot-direct','Tir simple',true);
+ assert.equal(clickAttack.use().options.skipDialog,undefined,
+  'PF1 character-sheet attack Action.use retains dialog');
  const reloadInstant=nativeWeapon.use({actionId:'reload-direct',rollMode:'gmroll'});
  assert.equal(reloadInstant.options.skipDialog,true,'Reload is immediate');
  assert.equal(reloadInstant.options.rollMode,'gmroll','roll mode preserved');
