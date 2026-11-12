@@ -1,3 +1,11 @@
+## 0.2.6 — PF1 ActionSelector Reload click fix (experimental)
+
+- Capture the real PF1 v11.11 action chooser click (`div.action[data-action="click"]` inside `form#ActionSelector-Actor-...-Item-...`), as identified in a live browser trace.
+- Only for uniquely matched weapon-owned `Reload`/`Recharger` actions, prevent the selector's default handler, close its chooser and call native `weapon.use({actionId,skipDialog:true})` directly.
+- Preserve normal `Attack` selection and unrelated action dialogs; no ammunition logic changes.
+- Add regression test that simulates the actual chooser DOM click, action resolution and native options.
+- Live in-world verification is required.
+
 ## 0.2.5 — Direct Reload button fix (experimental)
 
 - Fix the ItemAction parent resolution in PF1 v11.11: weapon-owned `Reload`/`Recharger` buttons now directly call their owning weapon's native `use({actionId,skipDialog:true})`, the same API verified by the user's working macro.
