@@ -1,3 +1,11 @@
+## 0.3.4 — Automatic explosion damage roll and chat buttons (experimental)
+
+- On a confirmed early-firearm explosion, roll damage **automatically once** from the weapon's native PF1 attack damage parts; post a dedicated chat card containing the rolled result.
+- Add **Jet de Réflexes DD 12**, **Appliquer les dégâts** and **Appliquer la moitié** alongside the result. Select affected tokens before clicking; uses PF1 native `actor.rollSavingThrow('ref', ...)` and `actor.applyDamage(...)` for health changes.
+- Guard against accidental duplicate damage applications to the same actor from the same chat card. Saving throws remain independent of damage application so the GM can adjudicate success/evasion.
+- If the native damage formula cannot be safely identified, do **not invent a value** or roll an arbitrary die. The card indicates manual adjudication instead. For exceptional weapons, a GM may explicitly set `flags.pf1-firearms-and-reload.explosionDamageFormula` to the correct normal-damage formula.
+- Damage is never applied without a deliberate button click; no automatic area targeting or automatic successful-save adjudication. Weapon state, misfire origin, ammo and Reload behavior remain unchanged.
+
 ## 0.3.3 — Second misfire and explosion tracking (experimental)
 
 - On a broken firearm, increase the natural-d20 misfire range by **+4**; an explicit weapon flag `flags.pf1-firearms-and-reload.brokenMisfireIncrease=2` enables the PF1 **+2** exception for applicable gun training. No automatic feat inference yet.
