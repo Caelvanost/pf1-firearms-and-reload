@@ -552,8 +552,8 @@ function rlInstall(){
 }
 Hooks.once('init',()=>{
  game.settings.register(RL_NS,RL_ENABLED,{
-  name:game.i18n?.localize?.('PF1AE.Settings.ReloadEnabled.Name')??'Automatic weapon reload tracking',
-  hint:game.i18n?.localize?.('PF1AE.Settings.ReloadEnabled.Hint')??'Opt-in reload tracking for configured PF1 weapons.',
+  name:game.i18n?.localize?.('PF1FR.Settings.ReloadEnabled.Name')??'Automatic weapon reload tracking',
+  hint:game.i18n?.localize?.('PF1FR.Settings.ReloadEnabled.Hint')??'Opt-in reload tracking for configured PF1 weapons.',
   scope:'world',config:true,restricted:true,type:Boolean,default:false
  });
 });
