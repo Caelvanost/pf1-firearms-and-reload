@@ -413,7 +413,26 @@ function rlOnNativeAttackRoll(action,roll){
  console.debug('[PF1FR][Misfire] Native PF1 attack roll captured',
   {weapon:item.name,natural:result,rolls:existing.length});
 }
-function rlTrackMisfire(use){
+const rlMisfireFlag=weapon=>weapon?.getFlag?.(RL_NS,'misfire')===true;
+/**
+ * Broken by a FIRST verified misfire: use PF1's actual system.broken
+ * condition and a separate item flag recording the cause.
+ * A later ability script can check the flag and clear BOTH explicitly.
+ * Never label ordinary physical damage as a misfire; never clear either
+ * value here, and never auto-resolve the subsequent explosion.
+ */
+async function rlMarkMisfireBroken(weapon){
+ if(weapon?.type!=='weapon')return false;
+ if(!rlOwner(rlActor(weapon)))throw Error('Weapon OWNER permission required.');
+ if(rlMisfireFlag(weapon))return false; // already recorded, no duplicate
+ if(weapon.isBroken===true||weapon.system?.broken===true)return false;
+ await weapon.update({
+  'system.broken':true,
+  ['flags.'+RL_NS+'.misfire']:true
+ });
+ return true;
+}
+async function rlTrackMisfire(use){
  if(!rlAllowed()||RL_MISFIRE_SEEN.has(use))return;
  RL_MISFIRE_SEEN.add(use);
  const result=rlInspectMisfire(use);
@@ -421,9 +440,28 @@ function rlTrackMisfire(use){
  RL_MISFIRE_LAST={weapon:use?.item?.name??null,actor:use?.actor?.name??null,
   action:use?.action?.name??null,...result};
  if(result.status==='misfire'){
-  Hooks.callAll('pf1frMisfireDetected',{use,weapon:use.item,...result});
-  ui.notifications?.warn?.('PF1FR: Long feu détecté pour '+use.item.name+
-   ' — vérifier l’état brisé avant le prochain tir.');
+  const weapon=use.item;
+  const wasBroken=weapon.isBroken===true||weapon.system?.broken===true;
+  const alreadyMarked=rlMisfireFlag(weapon);
+  let applied=false;
+  try{
+   if(!wasBroken&&!alreadyMarked){
+    applied=await rlMarkMisfireBroken(weapon);
+   }
+  }catch(error){
+   RL_MISFIRE_LAST={...RL_MISFIRE_LAST,brokenApplied:false,
+    reason:String(error?.message??error)};
+   console.error('[PF1FR][Misfire] Could not mark weapon broken',error);
+   ui.notifications?.error?.('PF1FR: Impossible de marquer l’arme comme brisée après le long feu.');
+  }
+  RL_MISFIRE_LAST={...RL_MISFIRE_LAST,brokenApplied:applied,
+   misfireFlag:rlMisfireFlag(weapon)};
+  Hooks.callAll('pf1frMisfireDetected',{use,weapon,...result,
+   brokenApplied:applied,alreadyBroken:wasBroken,misfireFlag:rlMisfireFlag(weapon)});
+  if(applied)ui.notifications?.warn?.(
+   'PF1FR: Long feu — '+weapon.name+' est brisé (misfire).');
+  else if(wasBroken||alreadyMarked)ui.notifications?.warn?.(
+   'PF1FR: Nouveau long feu sur une arme déjà brisée — vérifiez les règles d’explosion.');
  }else if(result.status==='unresolved'){
   console.debug('[PF1FR][Misfire] PF1 natural d20 data not established',RL_MISFIRE_LAST);
  }
@@ -948,7 +986,7 @@ function rlInstall(){
    return;
   }
   if(use?.item?.type==='weapon'&&RL_SHOTS.has(use)){
-   rlTrackMisfire(use);
+   void rlTrackMisfire(use);
    void rlCommitShot(use);
   }
  });;
@@ -982,6 +1020,7 @@ Hooks.once('ready',async()=>{
    }),
   misfire:Object.freeze({
    profile:rlMisfireProfile,inspect:rlInspectMisfire,
+   isMarked:rlMisfireFlag,flagPath:'flags.'+RL_NS+'.misfire',
    lastDiagnostic:()=>RL_MISFIRE_LAST?{...RL_MISFIRE_LAST}:null
   }),
   lastDiagnostic:()=>RL_LAST?{...RL_LAST}:null,
