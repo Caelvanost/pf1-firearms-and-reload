@@ -21,6 +21,8 @@ const weapon={id:'w',uuid,type:'weapon',actor,actions:[],system:{ammo:{default:'
  async update(data){
   if(data['system.ammo.default'])this.system.ammo.default=data['system.ammo.default'];
   if(Object.hasOwn(data,'system.broken'))this.system.broken=data['system.broken'];
+  if(Object.hasOwn(data,'system.hp.value'))this.system.hp.value=data['system.hp.value'];
+  if(Object.hasOwn(data,'system.hp.offset'))this.system.hp.offset=data['system.hp.offset'];
   if(Object.hasOwn(data,'flags.pf1-firearms-and-reload.misfire'))
    this.flags.misfire=data['flags.pf1-firearms-and-reload.misfire'];
   if(Object.hasOwn(data,'flags.pf1-firearms-and-reload.exploded'))
@@ -518,6 +520,14 @@ context.globalThis=context;vm.createContext(context);vm.runInContext(code,contex
  weapon.name='Pistolet à double canon';
  weapon.system.description={value:'Misfire 1–2 (5 ft.); Capacity 2'};
  weapon.system.broken=true;weapon.flags.misfire=true;
+ weapon.system.enh=0;
+ weapon.system.hp={value:12,max:12,base:12,offset:0};
+ assert.equal(api.misfire.isMagical(weapon),false);
+ assert.deepEqual(
+  Object.entries(api.misfire.explosionHitPointUpdate(weapon).changes)
+   .map(([key,value])=>[key,value]),
+  [['system.hp.value',0],['system.hp.offset',-12]],
+  'nonmagical firearm will be destroyed without touching maximum HP');
  const second=natural=>({item:weapon,actor,action:{
   id:'shot',actionType:'rwak',hasAttack:true},
   shared:{chatAttacks:[{attack:{roll:asRoll(natural)}}]}});
@@ -546,6 +556,12 @@ context.globalThis=context;vm.createContext(context);vm.runInContext(code,contex
  assert.equal(explosionCard.flags['pf1-firearms-and-reload'].explosionDamage.total,7);
  assert.equal(weapon.flags.exploded,true,'explosion persisted on weapon Item');
  assert.equal(weapon.flags.explosionPending,true,'GM must resolve burst damage');
+ assert.equal(weapon.system.hp.value,0,
+  'nonmagical firearm explosion sets actual Item HP to zero');
+ assert.equal(weapon.system.hp.max,12,'maximum Item HP is preserved');
+ assert.equal(weapon.system.hp.offset,-12,'PF1 derived health offset is reconciled');
+ assert.equal(actor.system?.attributes?.hp?.value,undefined,
+  'carrier HP never changed by destroying the firearm');
  assert.equal(weapon.flags.misfire,true,'repair origin flag preserved');
  assert.equal(api.misfire.isExploded(weapon),true);
  assert.equal(api.misfire.lastDiagnostic().explosionApplied,true,
@@ -558,6 +574,22 @@ context.globalThis=context;vm.createContext(context);vm.runInContext(code,contex
   item:weapon,action:simple
  }).ok,false,'exploded firearm cannot shoot');
  // An advanced firearm never explodes, even when already broken.
+ // Magical guns become unusable from the blast, but retain their own HP.
+ const magicGun={...weapon,uuid:'Actor.a.Item.magicGun',name:'Pistolet magique',
+  system:{...weapon.system,enh:1,hp:{value:19,max:19,offset:0}},
+  flags:{...weapon.flags,exploded:false}};
+ magicGun.update=async function(data){
+  if(Object.hasOwn(data,'system.hp.value'))this.system.hp.value=data['system.hp.value'];
+  if(Object.hasOwn(data,'system.broken'))this.system.broken=data['system.broken'];
+  if(Object.hasOwn(data,'flags.pf1-firearms-and-reload.exploded'))
+   this.flags.exploded=data['flags.pf1-firearms-and-reload.exploded'];
+ };
+ assert.equal(api.misfire.isMagical(magicGun),true);
+ const magicApplied=await vm.runInContext('rlMarkExplosion',context)(magicGun,{});
+ assert.equal(magicApplied,true);
+ assert.equal(magicGun.system.hp.value,19,
+  'magic firearm explosion never reduces native Item HP to zero');
+ assert.equal(magicGun.flags.exploded,true,'magic firearm remains unusable');
  const advancedGun={...weapon,name:'Revolver',system:{
   ...weapon.system,description:{value:'Misfire 1 (5 ft.)'}}};
  const advancedUse={...second(1),item:advancedGun};
