@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { migrateLegacyReload, migrateLegacySetting } from "../scripts/migration.js";
+import { migrateLegacyReload } from "../scripts/migration.js";
 const old="pf1-automation-engine", modern="pf1-firearms-and-reload";
 function makeWeapon(id, legacy, destination) {
   const flags = { [old]: legacy ? {reloadState:structuredClone(legacy)} : {}, [modern]:destination ? {reloadState:structuredClone(destination)} : {} };
@@ -59,32 +59,4 @@ test("player cannot execute migration",async()=>{
   assert.equal(weapon.getFlag(modern,"reloadState"),undefined);
 });
 
-test("world reload opt-in setting migrates once and retains legacy value", async()=>{
-  fixture([]);
-  const data=new Map([["pf1-automation-engine.reloadEnabled",true],
-    ["pf1-firearms-and-reload.reloadEnabled",false],
-    ["pf1-firearms-and-reload.migrationSchema",0]]);
-  game.settings={
-    get(ns,key){return data.get(ns+"."+key);},
-    async set(ns,key,value){data.set(ns+"."+key,value);}
-  };
-  const migrated=await migrateLegacySetting();
-  assert.equal(migrated.migrated,true);
-  assert.equal(data.get("pf1-firearms-and-reload.reloadEnabled"),true);
-  assert.equal(data.get("pf1-firearms-and-reload.migrationSchema"),1);
-  assert.equal(data.get("pf1-automation-engine.reloadEnabled"),true);
-  await game.settings.set("pf1-firearms-and-reload","reloadEnabled",false);
-  const twice=await migrateLegacySetting();
-  assert.equal(twice.skipped,true);
-  assert.equal(data.get("pf1-firearms-and-reload.reloadEnabled"),false);
-});
-test("legacy setting unavailable leaves new setting intact",async()=>{
- fixture([]);
- const data=new Map([["pf1-firearms-and-reload.reloadEnabled",false],
-   ["pf1-firearms-and-reload.migrationSchema",0]]);
- game.settings={get(ns,k){if(ns==="pf1-automation-engine")throw Error("Missing registration");return data.get(ns+"."+k);},
-  async set(ns,k,v){data.set(ns+"."+k,v);}};
- const outcome=await migrateLegacySetting();
- assert.equal(outcome.skipped,true);
- assert.equal(data.get("pf1-firearms-and-reload.reloadEnabled"),false);
-});
+test("world reload opt
