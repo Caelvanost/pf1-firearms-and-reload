@@ -88,3 +88,7 @@ The v0.2.0 automatic action creator incorrectly required a native attack with fu
 ## v0.2.3 — Reload action name
 
 New automatically created weapon actions are named **Reload** (not Recharger). Previously created Recharger actions and manual custom action names are preserved and continue to be recognized; the native Attack action is unchanged.
+
+## v0.2.4 — PF1 v11.11 Reload dialog
+
+The experimental popup bypass now also targets the older PF1 `pf1.components.ItemAction.use()` entry point used by the system's action buttons, rather than only the newer `pf1.models.components.Action.use()`. Only weapon-owned non-attack Reload actions are affected. Full in-world verification is still required.
