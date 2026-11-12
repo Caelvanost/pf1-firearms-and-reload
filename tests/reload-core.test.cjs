@@ -190,6 +190,16 @@ context.globalThis=context;vm.createContext(context);vm.runInContext(code,contex
 
  await api.reload(weapon,{count:2});
  assert.equal(api.getState(weapon).slots.length,2);
+ // The native shot owns the local weapon until its PF1 post-use callback.
+ // Reload and unload must not mutate the loaded slots while it is in flight.
+ vm.runInContext("RL_FIRING.add(weapon.uuid)",context);
+ await assert.rejects(()=>api.reload(weapon,{count:1}),/in progress/i);
+ await assert.rejects(()=>api.unload(weapon,{count:1}),/in progress/i);
+ await assert.rejects(()=>api.configure(weapon,{
+  capacity:2,ammoType:'gunBullet',actionCosts:{double:2}
+ }),/in progress/i);
+ assert.equal(api.getState(weapon).slots.length,2);
+ vm.runInContext("RL_FIRING.delete(weapon.uuid)",context);
  await fire(double,2);await new Promise(r=>setImmediate(r));
  assert.equal(count.rolls,2);
  assert.equal(count.nativeAmmo,3,'double shot consumed two, not four');
