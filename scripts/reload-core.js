@@ -323,6 +323,89 @@ function rlDeny(use,result){
   actionId:use.action?.id,loaded:result.loaded??0,
   needed:result.needed??null,reason:result.reason??null});
 }
+/**
+ * Misfire phase 1: fail-closed detection. Rolls are inspected only when PF1
+ * provides the actual natural d20 result; attack TOTALS are never inferred
+ * as die faces. No broken flag, weapon deletion or explosion in this phase.
+ */
+const RL_MISFIRE_SEEN=new WeakSet();
+let RL_MISFIRE_LAST=null;
+function rlMisfireProfile(weapon){
+ if(weapon?.type!=='weapon')return null;
+ const name=String(weapon.name??'').toLowerCase();
+ if(!/(?:pistolet|pistol|mousquet|musket|tromblon|blunderbuss|arquebuse|arquebus|revolver|rifle|fusil|shotgun)/i.test(name))
+  return null;
+ const source=[
+  weapon.system?.description?.value,
+  weapon.system?.description?.unidentified,
+  weapon.system?.description?.summary,
+  weapon.system?.source?.text
+ ].map(rlPlain).join(' ');
+ // Standard compendium format: Misfire 1–2 (5 ft.) or Long feu 1–2 (1,5 m).
+ const match=source.match(/(?:misfire|long[ -]?feu|enrayement)\s*:?\s*(1)(?:\s*[-–—]\s*(\d))?/i);
+ if(!match)return {supported:true,known:false,reason:'no explicit misfire range in firearm description'};
+ const low=Number(match[1]),high=Number(match[2]??match[1]);
+ if(low!==1||high<1||high>10)
+  return {supported:true,known:false,reason:'invalid misfire range'};
+ const advanced=/(?:revolver|rifle|shotgun|fusil à pompe)/i.test(name);
+ return {supported:true,known:true,base:high,category:advanced?'advanced':'early',
+  source:'description'};
+}
+function rlNaturalD20(roll){
+ if(!roll||typeof roll!=='object')return null;
+ // Foundry Roll.terms is the authoritative source, not roll.total.
+ const dice=roll.dice??roll.terms?.filter?.(t=>t?.faces===20);
+ if(!Array.isArray(dice))return null;
+ const d20=dice.filter(d=>d?.faces===20);
+ if(d20.length!==1)return null; // complex or multiple d20 dice
+ const results=d20[0]?.results;
+ if(!Array.isArray(results))return null;
+ const active=results.filter(r=>r?.active!==false&&r?.discarded!==true&&r?.hidden!==true);
+ if(active.length!==1||!Number.isSafeInteger(active[0].result)||
+    active[0].result<1||active[0].result>20)return null;
+ return active[0].result;
+}
+function rlMisfireRolls(use){
+ const entries=use?.shared?.chatAttacks;
+ if(!Array.isArray(entries))return null;
+ return entries.map(entry=>{
+  const candidates=[
+   entry?.attack?.roll,entry?.attackRoll,entry?.attack?.attackRoll,
+   entry?.roll,entry?.attack?.rolls?.[0]
+  ].filter(Boolean);
+  const naturals=candidates.map(rlNaturalD20).filter(x=>x!==null);
+  return naturals.length===1?naturals[0]:null;
+ });
+}
+function rlInspectMisfire(use){
+ const profile=rlMisfireProfile(use?.item);
+ if(!profile?.supported||use?.action?.hasAttack!==true||
+    use?.action?.actionType!=='rwak')return {status:'not-firearm'};
+ if(!profile.known)return {status:'unconfigured',reason:profile.reason};
+ const rolls=rlMisfireRolls(use);
+ if(!rolls?.length||rolls.some(r=>r===null))
+  return {status:'unresolved',reason:'native PF1 natural d20 result not verified',
+   profile,rolls};
+ const threshold=profile.base;
+ const misfires=rolls.map((natural,index)=>({index,natural,misfire:natural<=threshold}));
+ return {status:misfires.some(r=>r.misfire)?'misfire':'clear',
+  profile,threshold,misfires};
+}
+function rlTrackMisfire(use){
+ if(!rlAllowed()||RL_MISFIRE_SEEN.has(use))return;
+ RL_MISFIRE_SEEN.add(use);
+ const result=rlInspectMisfire(use);
+ if(result.status==='not-firearm')return;
+ RL_MISFIRE_LAST={weapon:use?.item?.name??null,actor:use?.actor?.name??null,
+  action:use?.action?.name??null,...result};
+ if(result.status==='misfire'){
+  Hooks.callAll('pf1frMisfireDetected',{use,weapon:use.item,...result});
+  ui.notifications?.warn?.('PF1FR: Long feu détecté pour '+use.item.name+
+   ' — vérifier l’état brisé avant le prochain tir.');
+ }else if(result.status==='unresolved'){
+  console.debug('[PF1FR][Misfire] PF1 natural d20 data not established',RL_MISFIRE_LAST);
+ }
+}
 async function rlCommitShot(use){
  const actor=use.actor,weapon=use.item;
  const result=RL_SHOTS.get(use);
@@ -837,7 +920,10 @@ function rlInstall(){
    })();
    return;
   }
-  if(use?.item?.type==='weapon'&&RL_SHOTS.has(use))void rlCommitShot(use);
+  if(use?.item?.type==='weapon'&&RL_SHOTS.has(use)){
+   rlTrackMisfire(use);
+   void rlCommitShot(use);
+  }
  });;
 }
 Hooks.once('ready',async()=>{
@@ -867,6 +953,10 @@ Hooks.once('ready',async()=>{
     nativeActionApi:typeof (globalThis.pf1?.models?.components?.Action??
      globalThis.pf1?.components?.Action??globalThis.pf1?.components?.ItemAction)?.create
    }),
+  misfire:Object.freeze({
+   profile:rlMisfireProfile,inspect:rlInspectMisfire,
+   lastDiagnostic:()=>RL_MISFIRE_LAST?{...RL_MISFIRE_LAST}:null
+  }),
   lastDiagnostic:()=>RL_LAST?{...RL_LAST}:null,
   ammoDiagnostic:rlAmmoDiagnostic
  });

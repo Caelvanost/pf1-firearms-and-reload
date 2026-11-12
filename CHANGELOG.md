@@ -1,3 +1,12 @@
+## 0.3.0 — Long-feu: phase 1 (experimental)
+
+- Recognize firearms with an explicit **Misfire / Long feu 1–N** value in their descriptions, distinguishing early and advanced firearms conservatively.
+- Examine **natural d20 faces** from PF1 native chat attack rolls after an authorized shot, never relying on an attack total or inventing a roll value.
+- Report verifiable misfires through the `pf1frMisfireDetected` hook and a visible warning; expose `game.modules.get('pf1-firearms-and-reload').api.reload.misfire.lastDiagnostic()` for live Foundry testing.
+- Unknown or ambiguous roll formats fail closed with diagnostic `unresolved`; crossbows and Reload actions are excluded.
+- **Phase 1 does not yet mark weapons broken, suppress damage/hits, apply explosions, destroy items, or auto-repair firearms.** These effects need in-world validation and separate regression coverage, including modifiers, scatter fire, dual barrels and second misfires.
+- Existing Reload button, ActionSelector closing, ammunition accounting and multiplayer behavior are unchanged.
+
 ## 0.2.7 — Close ActionSelector after Reload (experimental)
 
 - Fix the native PF1 ActionSelector remaining open after a successful direct Reload selection.

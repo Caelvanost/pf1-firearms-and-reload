@@ -104,3 +104,13 @@ The real action selector UI uses `form#ActionSelector-...` and `div.action[data-
 ## v0.2.7 — Close the Reload action chooser
 
 Upon selecting a weapon-owned Reload or Recharger entry, the module now closes the **specific** PF1 ActionSelector window using Foundry 13's `foundry.applications.instances` ApplicationV2 registry, before invoking the existing successful native Reload flow. Legacy `ui.windows` remains a fallback. Other windows, Attack actions, and ammunition processing remain unchanged.
+
+## v0.3.0 — Long-feu (misfire) detection, phase 1
+
+The module now inspects native PF1 attack rolls from authorized firearm shots to detect the **natural d20** result against an explicit `Misfire / Long feu 1–N` value in the weapon description. A verified misfire emits `pf1frMisfireDetected` and warns the shooter to check the broken condition. Check the most recent inspection via the Foundry console:
+
+```js
+console.log(game.modules.get('pf1-firearms-and-reload').api.reload.misfire.lastDiagnostic());
+```
+
+The possible results are `misfire`, `clear`, `unconfigured` or `unresolved`. This deliberately **does not** yet set PF1's broken condition, destroy a weapon, cancel damage, resolve scatter attacks or roll an explosion. Do not treat this first phase as complete automated long-feu rules. It is the safe instrumentation stage for verifying PF1 v11.11's actual roll data and adding those consequences in subsequent releases.

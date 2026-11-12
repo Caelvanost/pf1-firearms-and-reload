@@ -1,8 +1,8 @@
 {
   "id": "pf1-firearms-and-reload",
   "title": "PF1 Firearms & Reload",
-  "description": "Experimental PF1 reloading: close native Foundry V13 ActionSelector ApplicationV2 after direct Reload.",
-  "version": "0.2.7",
+  "description": "Experimental long-feu detection phase 1: inspect natural d20 firearm attack rolls and report verified misfires; broken/explosion automation pending live validation.",
+  "version": "0.3.0",
   "authors": [
     {
       "name": "Caelvanost"
@@ -42,6 +42,6 @@
   "url": "https://github.com/Caelvanost/pf1-firearms-and-reload",
   "manifest": "https://raw.githubusercontent.com/Caelvanost/pf1-firearms-and-reload/main/module.json",
   "readme": "https://github.com/Caelvanost/pf1-firearms-and-reload/blob/main/README.md",
-  "download": "https://github.com/Caelvanost/pf1-firearms-and-reload/releases/download/v0.2.7/pf1-firearms-and-reload-v0.2.7.zip",
+  "download": "https://github.com/Caelvanost/pf1-firearms-and-reload/releases/download/v0.3.0/pf1-firearms-and-reload-v0.3.0.zip",
   "changelog": "https://github.com/Caelvanost/pf1-firearms-and-reload/blob/main/CHANGELOG.md"
 }
