@@ -52,3 +52,11 @@ Enable **PF1 Firearms & Reload** in Foundry's *Manage Modules*. No additional se
 ## Concurrency and safety note
 
 A shot blocks competing local chamber mutations until the PF1 post-use handler has removed the fired slots. When the ammunition identity or available chambers differ from the authorized shot, the module logs a `shot-reconciliation-required` diagnostic rather than silently discarding an unrelated cartridge. The underlying native PF1 inventory deduction cannot be undone safely at this stage. **Cross-client atomicity is not yet implemented.** Do not run simultaneous reload/tir operations from separate browser clients on the same weapon in this preview.
+
+## Legacy event compatibility
+
+The standalone engine emits its own `pf1frReload`, `pf1frReloadShot`, `pf1frReloadUnload` and `pf1frReloadFireDenied` notifications, while **also emitting** the original `pf1aeReload`, `pf1aeReloadShot`, `pf1aeUnload` and `pf1aeReloadFireDenied` event names for existing macros. Each notification is emitted after its corresponding operation only once; these hooks do not subtract inventory ammunition. Legacy PF1AE's reload core must not be loaded at the same time.
+
+### Development ZIPs
+
+The pull request packaging workflow publishes a **temporary GitHub Actions artifact**, not a GitHub Release. The future tag-only release workflow validates that `module.json` refers to the exact versioned ZIP asset before publishing. Both modules must be updated together and tested on a copy of the world; the old PF1AE reload engine is deliberately excluded from the future PF1AE package.
