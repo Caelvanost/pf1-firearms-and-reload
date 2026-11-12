@@ -23,7 +23,7 @@ GM-only initial migration iterates world actors and accessible linked/unlinked s
 - Original PF1AE stores weapon locks in a client-local `Set`. This is **not a distributed transactional lock**, and simultaneous players/GM actions remain a race risk.
 - The source regression suite relies on a simulated PF1 ActionUse and **does not replace live Foundry v13.351 / PF1 v11.11 validation**.
 - Migration coordination by the lowest active GM ID avoids routine simultaneous runs but does not establish a distributed lock.
-- The historical `reloadEnabled` world setting is copied once to the new namespace when accessible, with a `migrationSchema` marker. It is left intact for rollback. A disconnected/absent source setting is logged and not overwritten.
+- **Always-on behavior:** enabling the Foundry module is sufficient. There is no `reloadEnabled` or similar world setting. Historical PF1AE preferences are ignored and preserved unchanged for rollback.
 - New API migration, compatibility adapter, acceptance tests and release publishing remain pending.
 
 ## Public API (preview)
@@ -43,4 +43,8 @@ Do not set `api.reloadDelegated` manually. That marker belongs exclusively to a 
 
 ## Transition verification (development branch)
 
-A draft PF1AE 1.24.6 branch removes `reload-core.js` from `esmodules` and installs a compatibility-only `reload-adapter.js`. The standalone engine's ownership guard activates only when PF1AE is absent/inactive or its adapter sets `api.reloadDelegated === true`. Node tests exercise all three states. This is **not** proof of multiplayer atomicity or a live PF1 ActionUse regression test.
+A draft PF1AE 1.24.6 branch removes `reload-core.js` from `esmodules` and installs a compatibility-only `reload-adapter.js`. The standalone engine starts whenever enabled in Foundry, except when an active old PF1AE still owns reload hooks. The guard checks the legacy manifest modules (and bridge marker where needed); incompatible legacy installations produce a persistent GM notification rather than running two engines. Node tests cover the scenarios. This is **not** proof of multiplayer atomicity or a live PF1 ActionUse regression test.
+
+## Automatic operation
+
+Enable **PF1 Firearms & Reload** in Foundry's *Manage Modules*. No additional setting is required or provided. The Reload/Chargement widget and native Reload actions are available automatically for supported weapons. Pair it with an updated PF1AE whose manifest replaces `scripts/reload-core.js` with `scripts/reload-adapter.js`; older active PF1AE versions must be upgraded or disabled to avoid double processing. The old PF1AE `reloadEnabled` preference is not read or copied. Per-weapon legacy states are still migrated.
