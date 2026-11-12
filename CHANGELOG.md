@@ -1,3 +1,9 @@
+## 0.1.2 — Native action-sheet Reload dialog fix (experimental)
+
+- Fix direct click on Recharger/Reload from PF1 v11.11 character sheet by intercepting the Action component's `use()` in addition to Item `use()`.
+- Keep attack dialogs, chat roll options, native PF1 ammo deduction and post-use reload hooks unchanged.
+- Add simulated character-sheet Action.use regression coverage; full Foundry verification still required.
+
 ## 0.1.1 — Instant native Reload (experimental)
 
 - Automatically bypass PF1 handedness and roll-configuration dialogs for unambiguous non-attack `Recharger` / `Reload` actions using the native `ItemPF.use({skipDialog:true})` option.
