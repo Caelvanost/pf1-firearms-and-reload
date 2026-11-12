@@ -68,3 +68,7 @@ The module automatically detects a non-attack `Recharger` or `Reload` action on 
 ## v0.1.2 — Action-sheet click fix
 
 The v0.1.1 Item.use-only hook missed PF1 action-sheet buttons. This version also hooks `pf1.models.components.Action.prototype.use` so the action itself delegates to PF1 with `skipDialog: true` before opening its normal configuration popup. The module remains always-on and does not change attack dialogs. Test this release directly in Foundry; the regression harness simulates the native action forwarding path.
+
+## v0.1.3 — Native ActionUse dialog guard
+
+The v0.1.1 and v0.1.2 sheet-method wrappers were insufficient in real-world testing. This release adds a more direct `pf1CreateActionUse` integration: recognized non-attack Reload actions receive `shared.skipDialog=true`, and their own `process()` is invoked with `skipDialog:true`. Other uses are untouched. This is an experimental update; verify the actual behavior in Foundry.
