@@ -26,7 +26,10 @@ const events={on(n,fn){(listeners.get(n)??listeners.set(n,[]).get(n)).push(fn)},
   if(fn(...args)===false)allowed=false;
  }return allowed}};
 const actionType={create:async(data,{parent})=>{
- const a={...data,id:'reloadA',item:parent,hasAttack:false};
+ // PF1 v11.11 Action.create iterates data.map() and requires an array.
+ assert.ok(Array.isArray(data),'PF1 Action.create requires an array of action records');
+ assert.equal(data.length,1,'create exactly one native Reload action');
+ const a={...data[0],id:'reloadA',item:parent,hasAttack:false};
  parent.actions.push(a);return [a];
 }};
 class ActionUse{
