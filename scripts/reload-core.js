@@ -564,6 +564,7 @@ function rlInstall(){
   if(!rlAllowed()||typeof use?.process!=='function')return;
   const request=rlReloadRequest(use);
   if(!request.candidate||!request.weapon||use.action?.hasAttack)return;
+  if(use.shared && typeof use.shared==='object') use.shared.skipDialog=true;
   const original=use.process;
   if(original.pf1frInstantProcessWrapped)return;
   const wrapped=function(options={}){
