@@ -602,7 +602,18 @@ function rlInstallInstantUse(){
   const original=proto.use;
   if(original.pf1frInstantReloadWrapped){installed++;continue;}
   const wrapped=function(options={}){
-   const item=this.item??(this.parent?.documentName==='Item'?this.parent:null);
+   // The PF1 v11.11 ItemAction is a pseudo-document owned by this.parent.
+   // Route Reload *directly* through the native ItemPF.use entry point
+   // demonstrated to work in-world (actionId + skipDialog). This also
+   // avoids implicit action selection and the Action.use popup pathway.
+   const weapon=this.parent?.type==='weapon'
+    ?this.parent:(this.item?.type==='weapon'?this.item:null);
+   if(rlAllowed()&&weapon&&rlReloadName(this.name)&&this.hasAttack!==true&&
+      typeof weapon.use==='function'){
+    const supplied=options&&typeof options==='object'?options:{};
+    return weapon.use({...supplied,actionId:this.id,skipDialog:true});
+   }
+   const item=this.parent??this.item;
    return original.call(this,ensureSkip(item,this,options));
   };
   wrapped.pf1frInstantReloadWrapped=true;

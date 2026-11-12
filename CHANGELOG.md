@@ -1,3 +1,10 @@
+## 0.2.5 — Direct Reload button fix (experimental)
+
+- Fix the ItemAction parent resolution in PF1 v11.11: weapon-owned `Reload`/`Recharger` buttons now directly call their owning weapon's native `use({actionId,skipDialog:true})`, the same API verified by the user's working macro.
+- Preserve all other action dialogs, the native Attack flow, the action ID and supplied roll mode.
+- Regression tests now simulate the actual `ItemAction.parent` structure rather than a fabricated `ItemAction.item` property.
+- Requires live Foundry confirmation.
+
 ## 0.2.4 — PF1 ItemAction Reload popup fix (experimental)
 
 - Intercept the correct PF1 v11.11 action class, `pf1.components.ItemAction.use`, before it forwards Reload to the item.

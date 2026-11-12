@@ -92,3 +92,7 @@ New automatically created weapon actions are named **Reload** (not Recharger). P
 ## v0.2.4 — PF1 v11.11 Reload dialog
 
 The experimental popup bypass now also targets the older PF1 `pf1.components.ItemAction.use()` entry point used by the system's action buttons, rather than only the newer `pf1.models.components.Action.use()`. Only weapon-owned non-attack Reload actions are affected. Full in-world verification is still required.
+
+## v0.2.5 — Direct weapon Reload use
+
+For weapon-owned Reload/Recharger actions, the module now invokes the parent weapon's native `ItemPF.use({actionId,skipDialog:true})` (same API as the validated Foundry macro) instead of trying to forward dialog options via the `ItemAction.use` wrapper. Other actions and native ammo rules are unchanged. This remains a live-test prerelease.
