@@ -1,8 +1,8 @@
 {
   "id": "pf1-firearms-and-reload",
   "title": "PF1 Firearms & Reload",
-  "description": "Automatic firearm explosion damage roll and interactive Reflex DC 12, apply full and half damage card for PF1 v11.11.",
-  "version": "0.3.4",
+  "description": "Fix nonmagical firearm explosions: set native PF1 item current HP to zero and retain magic firearm HP.",
+  "version": "0.3.5",
   "authors": [
     {
       "name": "Caelvanost"
@@ -42,6 +42,6 @@
   "url": "https://github.com/Caelvanost/pf1-firearms-and-reload",
   "manifest": "https://raw.githubusercontent.com/Caelvanost/pf1-firearms-and-reload/main/module.json",
   "readme": "https://github.com/Caelvanost/pf1-firearms-and-reload/blob/main/README.md",
-  "download": "https://github.com/Caelvanost/pf1-firearms-and-reload/releases/download/v0.3.4/pf1-firearms-and-reload-v0.3.4.zip",
+  "download": "https://github.com/Caelvanost/pf1-firearms-and-reload/releases/download/v0.3.5/pf1-firearms-and-reload-v0.3.5.zip",
   "changelog": "https://github.com/Caelvanost/pf1-firearms-and-reload/blob/main/CHANGELOG.md"
 }
