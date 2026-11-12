@@ -1,3 +1,9 @@
+## 0.2.2 — Native PF1 Action.create array contract fix
+
+- Fix `TypeError: e.map is not a function` in PF1 v11.11 when automatically generating weapon-owned Recharger actions; pass an array of action data to `Action.create([data], {parent: weapon})`.
+- Strengthen tests to require array inputs, preventing the earlier permissive mock from hiding the API error.
+- Existing compatible weapons are re-scanned on GM world startup; no need to delete or re-add weapons.
+
 ## 0.2.1 — Stock crossbow detection fix (experimental)
 
 - Automatically add `Recharger` to recognized light/hand/heavy crossbows and standard early firearms without requiring native `Attack` ammunition fields to be configured first.
