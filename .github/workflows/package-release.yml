@@ -1,0 +1,73 @@
+name: Package and Publish Foundry Module
+
+on:
+  pull_request:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - module.json
+      - .github/workflows/package-release.yml
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Run regression tests
+        run: npm test
+      - name: Validate release manifest on tags
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const m=JSON.parse(fs.readFileSync('module.json','utf8'));
+          const tag='v'+m.version;
+          const expected='https://github.com/Caelvanost/pf1-firearms-and-reload/releases/download/'+tag+'/pf1-firearms-and-reload-'+tag+'.zip';
+          if(m.id!=='pf1-firearms-and-reload'||('v'+m.version)!==tag||m.download!==expected) {
+            throw new Error('Release id/version/download must match the tag and asset exactly');
+          }
+          NODE
+      - name: Build ZIP with module.json at root
+        run: |
+          set -euo pipefail
+          mkdir -p dist stage/scripts stage/lang
+          cp module.json README.md CHANGELOG.md stage/
+          cp scripts/*.js stage/scripts/
+          cp lang/*.json stage/lang/
+          VERSION=$(node -p "JSON.parse(require('fs').readFileSync('module.json')).version")
+          (cd stage && zip -q -r "../dist/pf1-firearms-and-reload-v${VERSION}.zip" .)
+          unzip -l "dist/pf1-firearms-and-reload-v${VERSION}.zip" | tee dist/contents.txt
+          unzip -p "dist/pf1-firearms-and-reload-v${VERSION}.zip" module.json | node -e "let s='';process.stdin.on('data',x=>s+=x).on('end',()=>{const m=JSON.parse(s);if(m.id!=='pf1-firearms-and-reload')process.exit(1)})"
+          unzip -Z1 "dist/pf1-firearms-and-reload-v${VERSION}.zip" | grep -qx 'scripts/reload-core.js'
+          unzip -Z1 "dist/pf1-firearms-and-reload-v${VERSION}.zip" | grep -qx 'scripts/migration.js'
+          if unzip -Z1 "dist/pf1-firearms-and-reload-v${VERSION}.zip" | grep -Eq '^tests/|^\.github/|^node_modules/'; then exit 1; fi
+      - name: Upload preview archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: pf1-firearms-and-reload-foundry-zip
+          path: dist/*.zip
+          if-no-files-found: error
+      - name: Publish experimental release after merging tested manifest
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          VERSION=$(node -p "JSON.parse(require('fs').readFileSync('module.json')).version")
+          TAG="v${VERSION}" 
+          FILE="dist/pf1-firearms-and-reload-${TAG}.zip"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$FILE" --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create "$TAG" "$FILE" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "PF1 Firearms & Reload $TAG (experimental)" --generate-notes --prerelease
+          fi
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json tagName,assets,url

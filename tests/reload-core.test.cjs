@@ -78,6 +78,13 @@ context.globalThis=context;vm.createContext(context);vm.runInContext(code,contex
  for(const fn of once.get('init')??[])fn();
  for(const fn of once.get('ready')??[])await fn();
  const api=context.game.modules.get('pf1-firearms-and-reload').api.reload;
+ const seenEvents={frReload:0,oldReload:0,frShot:0,oldShot:0,frUnload:0,oldUnload:0};
+ for(const [event,key] of [
+  ['pf1frReload','frReload'],['pf1aeReload','oldReload'],
+  ['pf1frReloadShot','frShot'],['pf1aeReloadShot','oldShot'],
+  ['pf1frReloadUnload','frUnload'],['pf1aeUnload','oldUnload']
+ ])events.on(event,()=>{seenEvents[key]++});
+
  // Regression: widget anchors to a native language-independent hardness
  // input, within the sidebar; it must never prepend the item header.
  assert.match(code,/sidebar\.querySelector\('input\[name="system\.hardness"\]'\)/);
@@ -190,6 +197,28 @@ context.globalThis=context;vm.createContext(context);vm.runInContext(code,contex
 
  await api.reload(weapon,{count:2});
  assert.equal(api.getState(weapon).slots.length,2);
+ // The native shot owns the local weapon until its PF1 post-use callback.
+ // Reload and unload must not mutate the loaded slots while it is in flight.
+ vm.runInContext("RL_FIRING.add(weapon.uuid)",context);
+ await assert.rejects(()=>api.reload(weapon,{count:1}),/in progress/i);
+ await assert.rejects(()=>api.unload(weapon,{count:1}),/in progress/i);
+ await assert.rejects(()=>api.configure(weapon,{
+  capacity:2,ammoType:'gunBullet',actionCosts:{double:2}
+ }),/in progress/i);
+ assert.equal(api.getState(weapon).slots.length,2);
+ vm.runInContext("RL_FIRING.delete(weapon.uuid)",context);
+ // Simulate a stale authorized shot whose selected ammunition does not
+ // match the currently loaded chambers. Never silently discard the slots.
+ const staleUse=new ActionUse(simple,1);
+ context.staleUse=staleUse;
+ vm.runInContext("RL_SHOTS.set(staleUse,{needed:1,selected:'wrong-ammo'})",context);
+ vm.runInContext("RL_FIRING.add(weapon.uuid)",context);
+ const beforeMismatch=api.getState(weapon);
+ await vm.runInContext("rlCommitShot(staleUse)",context);
+ assert.deepEqual(api.getState(weapon),beforeMismatch,
+  'mismatched shot leaves all chambers unchanged for manual reconciliation');
+ assert.equal(api.lastDiagnostic().status,'shot-reconciliation-required');
+ assert.equal(vm.runInContext("RL_FIRING.has(weapon.uuid)",context),false);
  await fire(double,2);await new Promise(r=>setImmediate(r));
  assert.equal(count.rolls,2);
  assert.equal(count.nativeAmmo,3,'double shot consumed two, not four');
@@ -227,11 +256,17 @@ context.globalThis=context;vm.createContext(context);vm.runInContext(code,contex
  assert.equal(ammo.system.quantity,5,'other native ammo stack unchanged');
  actor.items.delete(legacy.id);
  weapon.system.ammo.default='am';
-  settings.set('reloadEnabled',false);
  await fire(simple);
- assert.equal(count.rolls,4,'module disabled => native PF1 allowed after legacy test shot');
- settings.set('reloadEnabled',true);
- assert.equal(api.getState(weapon).slots.length,0,'world flag remains persisted');
+ assert.equal(count.rolls,3,'module remains enforced without a world setting');
+ assert.equal(api.getState(weapon).slots.length,0,'empty weapon still denied');
  assert.equal(typeof api.timing,'undefined','action economy belongs to native Reload');
- console.log('PASS reload core: manual Reload, empty/double pre-roll denial, native ammo once, load/unload and opt-out');
+ assert.ok(seenEvents.frReload>0&&seenEvents.frShot>0&&seenEvents.frUnload>0);
+ assert.equal(seenEvents.frReload,seenEvents.oldReload,
+  'reload notifications preserve PF1AE legacy listeners without duplicate writes');
+ assert.equal(seenEvents.frShot,seenEvents.oldShot,
+  'shot notifications preserve PF1AE legacy listeners');
+ assert.equal(seenEvents.frUnload,seenEvents.oldUnload,
+  'unload notifications preserve PF1AE legacy listeners');
+
+ console.log('PASS reload core: manual Reload, empty/double pre-roll denial, native ammo once, load/unload and always-on');
 })().catch(error=>{console.error(error);process.exitCode=1});

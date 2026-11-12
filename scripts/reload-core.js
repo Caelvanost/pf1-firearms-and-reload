@@ -5,11 +5,17 @@ import { migrateLegacyReload } from "./migration.js";
  * Loaded rounds are reserved, not removed from inventory by reload.
  * Only explicitly configured weapons are intercepted.
  */
-const RL_NS='pf1-firearms-and-reload',RL_KEY='reloadState',RL_ENABLED='reloadEnabled';
+const RL_NS='pf1-firearms-and-reload',RL_KEY='reloadState';
 const RL_ACTION='pf1fr-reload';
 const RL_BUSY=new Set(),RL_SHOTS=new WeakMap(),RL_DENIED=new WeakSet();
 const RL_RELOAD_SEEN=new WeakSet();
 const RL_FIRING=new Set();
+// Compatibility bridge for worlds listening to PF1AE's old event names.
+// The old engine is unloaded, so these notifications never double-apply changes.
+const rlEvent=(current,legacy,payload)=>{
+ Hooks.callAll(current,payload);
+ if(legacy)Hooks.callAll(legacy,payload);
+};
 let RL_LAST=null;
 const rlL=(key,data={})=>{
  const fallback={
@@ -37,10 +43,16 @@ const rlL=(key,data={})=>{
  return translated;
 };
 const rlAllowed=()=>{
- if(game.modules.get(RL_NS)?.active!==true || game.settings.get(RL_NS,RL_ENABLED)!==true) return false;
+ if(game.modules.get(RL_NS)?.active!==true) return false;
  // Safe until PF1AE has been upgraded to a delegating compatibility adapter.
  const old=game.modules.get('pf1-automation-engine');
- if(old?.active && old.api?.reloadDelegated !== true) return false;
+ if(old?.active){
+  const scripts=Array.isArray(old.esmodules)?old.esmodules:null;
+  // Inspect manifest ownership as well as the ready-time bridge marker;
+  // Foundry may invoke the standalone ready handler before PF1AE's adapter.
+  if(scripts?.some(path=>String(path).endsWith('/reload-core.js'))) return false;
+  if(!scripts?.includes('scripts/reload-adapter.js') && old.api?.reloadDelegated!==true) return false;
+ }
  return true;
 };
 const rlActor=weapon=>weapon?.actor??(weapon?.parent?.documentName==='Actor'?weapon.parent:null);
@@ -111,9 +123,10 @@ function rlAvailable(weapon,ammoId,state){
  const own=state.slots.filter(x=>x.ammoId===ammoId).length;
  return Math.max(0,rlQuantity(ammo)-rlReservations(actor,ammoId,weapon)-own);
 }
-const rlLock=async(weapon,fn)=>{
- const key=weapon.uuid;
- if(!key||RL_BUSY.has(key))throw Error('Weapon operation already in progress.');
+const rlLock=async(weapon,fn,{allowFiring=false}={})=>{
+ const key=weapon?.uuid;
+ if(!key||RL_BUSY.has(key)||(!allowFiring&&RL_FIRING.has(key)))
+  throw Error('Weapon operation already in progress.');
  RL_BUSY.add(key);
  try{return await fn()}finally{RL_BUSY.delete(key)}
 };
@@ -243,7 +256,7 @@ async function rlReload(weapon,{ammoId,count=1}={}){
  const actor=rlActor(weapon),state=rlState(weapon);
  if(!state)throw Error(rlL('Unconfigured'));
  if(!rlOwner(actor))throw Error('Actor OWNER permission required.');
- if(!rlAllowed())throw Error('Automatic reload is disabled.');
+ if(!rlAllowed())throw Error('Reload manager is unavailable or a legacy engine is still active.');
  if(!Number.isSafeInteger(count)||count<1)throw Error('Invalid reload quantity.');
  return rlLock(weapon,async()=>{
   const current=rlState(weapon);
@@ -278,7 +291,7 @@ async function rlReload(weapon,{ammoId,count=1}={}){
    void ChatMessage.create({speaker:ChatMessage.getSpeaker({actor}),
      content:foundry.utils.escapeHTML?.(msg)??msg}).catch(err=>console.warn('[PF1FR][Reload] Chat',err));
   }
-  Hooks.callAll('pf1frReload', {actorUuid:actor.uuid,weaponUuid:weapon.uuid,
+  rlEvent('pf1frReload','pf1aeReload', {actorUuid:actor.uuid,weaponUuid:weapon.uuid,
     ammoId:selected,count,loaded:slots.length,capacity:current.capacity});
   return rlClone(next);
  });
@@ -293,7 +306,7 @@ async function rlUnload(weapon,{count=1}={}){
    throw Error('Invalid unload count.');
   const slots=state.slots.slice(0,-count),next={...state,slots};
   await weapon.setFlag(RL_NS,RL_KEY,next);
-  Hooks.callAll('pf1aeUnload',{actorUuid:actor.uuid,weaponUuid:weapon.uuid,
+  rlEvent('pf1frReloadUnload','pf1aeUnload',{actorUuid:actor.uuid,weaponUuid:weapon.uuid,
     count,loaded:slots.length});
   return rlClone(next);
  });
@@ -305,24 +318,41 @@ function rlDeny(use,result){
  RL_LAST={status:'blocked',actor:use.actor?.name??null,weapon:use.item?.name??null,
   action:use.action?.name??null,...result};
  console.warn('[PF1FR][Reload] Attack blocked before dice',result);
- Hooks.callAll('pf1frReloadFireDenied',{
+ rlEvent('pf1frReloadFireDenied','pf1aeReloadFireDenied',{
   actorUuid:use.actor?.uuid,weaponUuid:use.item?.uuid,
   actionId:use.action?.id,loaded:result.loaded??0,
   needed:result.needed??null,reason:result.reason??null});
 }
 async function rlCommitShot(use){
  const actor=use.actor,weapon=use.item;
- const state=rlState(weapon),result=RL_SHOTS.get(use);
- if(!state||!result)return;
- const after=state.slots.slice(result.needed);
- // This happens after native PF1 subtractAmmo() succeeds and post-use
- // occurs. A failed server update must not invent or restore inventory ammo.
+ const result=RL_SHOTS.get(use);
+ if(!result)return;
+ // Avoid carrying a snapshot across asynchronous updates. Reserve the
+ // local weapon for the entire native use and read latest slots under lock.
  try{
-  await rlLock(weapon,()=>weapon.setFlag(RL_NS,RL_KEY,{...state,slots:after}));
-  Hooks.callAll('pf1frReloadShot',{actorUuid:actor?.uuid,weaponUuid:weapon.uuid,
-    actionId:use.action?.id,spent:result.needed,loaded:after.length});
- }catch(error){console.error('[PF1FR][Reload] Shot state update failed',error);}
- finally{RL_FIRING.delete(weapon.uuid);}
+  await rlLock(weapon,async()=>{
+   const state=rlState(weapon);
+   if(!state||state.slots.length<result.needed)
+    throw Error('Loaded state changed during a native shot; manual reconciliation required.');
+   const selected=state.slots.slice(0,result.needed);
+   if(selected.some(slot=>slot.ammoId!==result.selected))
+    throw Error('Loaded ammunition changed during a native shot; manual reconciliation required.');
+   const after=state.slots.slice(result.needed);
+   // PF1 has already consumed native ammunition exactly once. We only
+   // update the separate chamber state; never consume or refund inventory.
+   await weapon.setFlag(RL_NS,RL_KEY,{...state,slots:after});
+   rlEvent('pf1frReloadShot','pf1aeReloadShot',{actorUuid:actor?.uuid,weaponUuid:weapon.uuid,
+     actionId:use.action?.id,spent:result.needed,loaded:after.length});
+  },{allowFiring:true});
+ }catch(error){
+  RL_LAST={status:'shot-reconciliation-required',weapon:weapon?.name??null,
+   reason:String(error?.message??error)};
+  console.error('[PF1FR][Reload] Shot state update failed; inspect weapon and inventory',error);
+  ui.notifications?.error?.('Reload tracking requires manual reconciliation for '+(weapon?.name??'weapon')+'.');
+ }finally{
+  RL_SHOTS.delete(use);
+  RL_FIRING.delete(weapon?.uuid);
+ }
 }
 // Automatic but conservative PF1 weapon inference. Capacity is generally
 // printed in the compendium description, not in a universal WeaponModel field.
@@ -550,13 +580,6 @@ function rlInstall(){
   if(use?.item?.type==='weapon'&&RL_SHOTS.has(use))void rlCommitShot(use);
  });;
 }
-Hooks.once('init',()=>{
- game.settings.register(RL_NS,RL_ENABLED,{
-  name:game.i18n?.localize?.('PF1FR.Settings.ReloadEnabled.Name')??'Automatic weapon reload tracking',
-  hint:game.i18n?.localize?.('PF1FR.Settings.ReloadEnabled.Hint')??'Opt-in reload tracking for configured PF1 weapons.',
-  scope:'world',config:true,restricted:true,type:Boolean,default:false
- });
-});
 Hooks.once('ready',async()=>{
  if(game.user?.isGM) await migrateLegacyReload();
  const mod=game.modules.get(RL_NS);
@@ -574,6 +597,15 @@ Hooks.once('ready',async()=>{
   lastDiagnostic:()=>RL_LAST?{...RL_LAST}:null,
   ammoDiagnostic:rlAmmoDiagnostic
  });
+ if(!rlAllowed()){
+  const old=game.modules.get('pf1-automation-engine');
+  if(old?.active){
+   const message='PF1 Firearms & Reload: PF1 Automation Engine still owns the old reload hooks. Update PF1AE to the version that delegates reloading; do not use both reload engines.';
+   console.error(message);
+   if(game.user?.isGM) ui.notifications?.error?.(message,{permanent:true});
+  }
+  return;
+ }
  rlInstall();
  Hooks.on('renderItemSheet',rlSheetWidget);
  Hooks.on('renderItemSheetV2',rlSheetWidget);

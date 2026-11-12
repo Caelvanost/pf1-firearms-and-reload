@@ -60,3 +60,4 @@ export async function migrateLegacyReload() {
   console.info("[PF1FR][Migration] Non-destructive reload state migration", report);
   return report;
 }
+

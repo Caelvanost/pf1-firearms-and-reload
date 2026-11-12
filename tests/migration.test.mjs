@@ -58,3 +58,4 @@ test("player cannot execute migration",async()=>{
   assert.equal(result.skipped,true);
   assert.equal(weapon.getFlag(modern,"reloadState"),undefined);
 });
+

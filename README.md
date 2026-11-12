@@ -2,7 +2,7 @@
 
 Development extraction of the **tested PF1 Automation Engine v1.24.5 reload core** for Foundry VTT 13.351 / Pathfinder 1e 11.11.
 
-> **Development preview — do not install on a production world yet.** No release ZIP is published. The legacy PF1AE reload engine has **not yet** been removed. If old PF1AE is active, the new engine remains disabled until PF1AE explicitly advertises `api.reloadDelegated === true`.
+> **Development preview — do not install on a production world yet.** No release ZIP is published. The legacy PF1AE reload engine has **not yet** been removed. If old PF1AE is active and still loads its own reload core, the standalone engine refuses to register duplicate reload hooks; use the paired PF1AE adapter branch.
 
 ## Preserved semantics
 
@@ -20,11 +20,11 @@ GM-only initial migration iterates world actors and accessible linked/unlinked s
 
 ## Known limitations / requirements before release
 
-- Original PF1AE stores weapon locks in a client-local `Set`. This is **not a distributed transactional lock**, and simultaneous players/GM actions remain a race risk.
+- Local reload/unload/configure writes are now blocked while the same weapon has an in-flight native shot. The post-use update reads current chamber slots under the local lock; a mismatch is reported for manual reconciliation. **This is still not a distributed transactional lock**: simultaneous actions from different clients may race.
 - The source regression suite relies on a simulated PF1 ActionUse and **does not replace live Foundry v13.351 / PF1 v11.11 validation**.
 - Migration coordination by the lowest active GM ID avoids routine simultaneous runs but does not establish a distributed lock.
-- The historical `reloadEnabled` setting needs controlled migration/retirement when the PF1AE adapter is integrated.
-- New API migration, compatibility adapter, acceptance tests and release publishing remain pending.
+- **Always-on behavior:** enabling the Foundry module is sufficient. There is no `reloadEnabled` or similar world setting. Historical PF1AE preferences are ignored and preserved unchanged for rollback.
+- The source adapter and regressions exist in draft branches; real Foundry integration, distributed synchronization, acceptance tests and release publishing remain pending.
 
 ## Public API (preview)
 
@@ -40,3 +40,23 @@ await api?.unload(weapon, { count: 1 });
 ```
 
 Do not set `api.reloadDelegated` manually. That marker belongs exclusively to a future PF1AE version with its legacy engine physically removed.
+
+## Transition verification (development branch)
+
+A draft PF1AE 1.24.6 branch removes `reload-core.js` from `esmodules` and installs a compatibility-only `reload-adapter.js`. The standalone engine starts whenever enabled in Foundry, except when an active old PF1AE still owns reload hooks. The guard checks the legacy manifest modules (and bridge marker where needed); incompatible legacy installations produce a persistent GM notification rather than running two engines. Node tests cover the scenarios. This is **not** proof of multiplayer atomicity or a live PF1 ActionUse regression test.
+
+## Automatic operation
+
+Enable **PF1 Firearms & Reload** in Foundry's *Manage Modules*. No additional setting is required or provided. The Reload/Chargement widget and native Reload actions are available automatically for supported weapons. Pair it with an updated PF1AE whose manifest replaces `scripts/reload-core.js` with `scripts/reload-adapter.js`; older active PF1AE versions must be upgraded or disabled to avoid double processing. The old PF1AE `reloadEnabled` preference is not read or copied. Per-weapon legacy states are still migrated.
+
+## Concurrency and safety note
+
+A shot blocks competing local chamber mutations until the PF1 post-use handler has removed the fired slots. When the ammunition identity or available chambers differ from the authorized shot, the module logs a `shot-reconciliation-required` diagnostic rather than silently discarding an unrelated cartridge. The underlying native PF1 inventory deduction cannot be undone safely at this stage. **Cross-client atomicity is not yet implemented.** Do not run simultaneous reload/tir operations from separate browser clients on the same weapon in this preview.
+
+## Legacy event compatibility
+
+The standalone engine emits its own `pf1frReload`, `pf1frReloadShot`, `pf1frReloadUnload` and `pf1frReloadFireDenied` notifications, while **also emitting** the original `pf1aeReload`, `pf1aeReloadShot`, `pf1aeUnload` and `pf1aeReloadFireDenied` event names for existing macros. Each notification is emitted after its corresponding operation only once; these hooks do not subtract inventory ammunition. Legacy PF1AE's reload core must not be loaded at the same time.
+
+### Development ZIPs
+
+The pull request packaging workflow publishes a **temporary GitHub Actions artifact**, not a GitHub Release. The future tag-only release workflow validates that `module.json` refers to the exact versioned ZIP asset before publishing. Both modules must be updated together and tested on a copy of the world; the old PF1AE reload engine is deliberately excluded from the future PF1AE package.

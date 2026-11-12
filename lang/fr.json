@@ -19,8 +19,8 @@
       "Save": "Enregistrer",
       "Shots": "Action d'attaque (facultative)",
       "Base": "Action de rechargement normale",
-      "SettingsHint": "Suivi optionnel des armes à feu et arbalètes configurées. PF1 conserve la consommation native des munitions. Configuration manuelle par arme ; désactivé par défaut.",
-      "SettingsName": "Gestion automatique du chargement des armes (expérimental)",
+      "SettingsHint": "Actif automatiquement quand PF1 Firearms & Reload est activé dans la gestion des modules.",
+      "SettingsName": "Rechargement automatique des armes",
       "SelectAmmo": "Choisir une munition de l'inventaire",
       "SelectAction": "Choisir une action d'attaque (facultatif)",
       "NoAmmo": "Aucune munition native trouvée dans l'inventaire du personnage. Ajoutez un objet de type Munition (ammo), et non un objet de butin ordinaire.",
@@ -37,12 +37,6 @@
       "ReloadFailed": "Échec du rechargement",
       "AmmoGuidance": "Vérifiez les objets Munition PF1 de l'inventaire, leur type et leur quantité. L'action Recharger doit utiliser « Aucune munition ».",
       "Loading": "Chargement"
-    },
-    "Settings": {
-      "ReloadEnabled": {
-        "Name": "Gestion automatique du chargement des armes (expérimental)",
-        "Hint": "Suivi optionnel des armes à feu et arbalètes configurées. PF1 conserve la consommation native des munitions. Configuration manuelle par arme ; désactivé par défaut."
-      }
     }
   }
 }
