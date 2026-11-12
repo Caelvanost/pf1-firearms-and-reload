@@ -575,6 +575,75 @@ function rlSheetWidget(sheet,html){
  * No replacement ActionUse, no custom ammo deduction, no click bubbling,
  * and no changes to normal attacks or ambiguous feat-based Reload actions.
  */
+/**
+ * PF1 11.11 ActionSelector is a separate form application. Selecting an
+ * entry is handled by its DOM click listener, NOT by ItemAction.use().
+ * The chooser entries expose .action[data-action="click"] and an image alt
+ * with the action's label; they do not expose data-action-id.
+ *
+ * Intercept only a uniquely identifiable non-attack Reload entry, resolve
+ * its owning weapon from the chooser's Actor/Item document identifiers,
+ * and invoke the EXACT native Item.use({actionId,skipDialog:true}) call
+ * already tested by the user. Leave Attack and ambiguous entries alone.
+ */
+function rlInstallSelectorReload(){
+ if(typeof document==='undefined'||typeof document.addEventListener!=='function')return false;
+ const handler=event=>{
+  if(!rlAllowed()||event?.defaultPrevented)return;
+  const row=event?.target?.closest?.('.action[data-action="click"]');
+  const form=row?.closest?.('form[id^="ActionSelector-"]');
+  if(!form||!row)return;
+  const label=String(row.querySelector?.('img[alt]')?.getAttribute?.('alt')??
+   row.textContent??'').trim();
+  if(!rlReloadName(label))return;
+  // The chooser form ID includes the owning Item ID, even though the
+  // clicked action row itself lacks data-item-id and data-action-id.
+  const id=String(form.id??'');
+  const match=id.match(/-Item-([A-Za-z0-9]+)(?:-|$)/);
+  if(!match)return;
+  const itemId=match[1];
+  const actors=[...(game.actors?.contents??[])];
+  for(const scene of game.scenes?.contents??[]){
+   for(const token of scene.tokens?.contents??[])
+    if(token?.actor)actors.push(token.actor);
+  }
+  const weapons=[];
+  for(const actor of actors){
+   const item=actor?.items?.get?.(itemId);
+   if(item?.type!=='weapon'||!id.includes('-Actor-'+actor.id+'-Item-'))continue;
+   if(!weapons.some(x=>x.uuid===item.uuid))weapons.push(item);
+  }
+  if(weapons.length!==1)return;
+  const weapon=weapons[0];
+  const candidates=rlActions(weapon).filter(action=>
+   String(action?.name??'').trim()===label&&
+   action.hasAttack!==true&&rlReloadName(action.name));
+  if(candidates.length!==1||typeof weapon.use!=='function')return;
+  event.preventDefault();
+  event.stopImmediatePropagation?.();
+  event.stopPropagation?.();
+  const action=candidates[0];
+  // Close only the chooser containing this exact form.
+  for(const app of Object.values(ui.windows??{})){
+   const root=app?.element?.[0]??app?.element;
+   if(root?.contains?.(form)||root===form){
+    void Promise.resolve(app.close?.()).catch(error=>
+     console.warn('[PF1FR][Reload] Could not close action chooser',error));
+    break;
+   }
+  }
+  console.debug('[PF1FR][Reload] ActionSelector selected Reload directly',
+   weapon.name,action.id);
+  void Promise.resolve().then(()=>weapon.use({
+   actionId:action.id,skipDialog:true
+  })).catch(error=>{
+   console.error('[PF1FR][Reload] Direct ActionSelector Reload failed',error);
+   ui.notifications?.error?.(String(error?.message??error));
+  });
+ };
+ document.addEventListener('click',handler,true);
+ return true;
+}
 function rlInstallInstantUse(){
  const ensureSkip=(item,action,options)=>{
   if(!rlAllowed()||!options||typeof options!=='object'||options.skipDialog===true)
@@ -800,6 +869,7 @@ Hooks.once('ready',async()=>{
  }
  rlInstall();
  rlInstallInstantUse();
+ rlInstallSelectorReload();
  if(game.user?.isGM){
   Hooks.on('createItem',item=>{
    if(item?.type==='weapon')void rlEnsureReloadAction(item);
