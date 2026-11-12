@@ -399,6 +399,80 @@ function rlInfer(weapon){
   'standard';
  return {ok:true,capacity,ammoType,ammoId:ammo.id,base:kind,source};
 }
+// Conservative automatic action creation: do not guess specialist weapons
+// (repeating crossbows, pepperboxes, advanced firearms or unusual magazines).
+// Native PF1 Action data is used; no independent feat is added to the actor.
+const RL_ACTION_BUILDING=new Set();
+function rlReloadProfile(weapon){
+ if(weapon?.type!=='weapon'||!rlActor(weapon)||!rlAttackActions(weapon).length)
+  return null;
+ const name=String(weapon.name??'').toLowerCase();
+ const ammoTypes=[...new Set(rlAttackActions(weapon).map(a=>a.ammo.type))];
+ if(ammoTypes.length!==1)return null;
+ const ammoType=ammoTypes[0];
+ if(/(?:repeating|répétition|repetition|pepperbox|pepper-box|revolver|rifle|fusil à répétition)/i.test(name))
+  return null;
+ if(/(?:arbalète|arbalete|crossbow)/i.test(name)){
+  if(!['bolt','repeatingBolt'].includes(ammoType))return null;
+  if(ammoType==='repeatingBolt')return null; // magazine/lever rules differ
+  if(/(?:lourde|heavy)/i.test(name))return {base:'full',kind:'heavy-crossbow'};
+  if(/(?:légère|legere|light|de poing|hand)/i.test(name))
+   return {base:'move',kind:'light-or-hand-crossbow'};
+  return null; // avoid guessing for exotic crossbows
+ }
+ if(ammoType!=='gunBullet'&&ammoType!=='dragoonBullet')return null;
+ // Early firearms: one standard action for a one-handed gun, one full-round
+ // action for a two-handed gun. Each barrel is loaded separately.
+ if(/(?:mousquet|musket|blunderbuss|tromblon)/i.test(name))
+  return {base:'full',kind:'early-two-handed-firearm'};
+ if(/(?:pistolet|pistol)/i.test(name))
+  return {base:'standard',kind:'early-one-handed-firearm'};
+ return null;
+}
+async function rlEnsureReloadAction(weapon){
+ if(!rlAllowed()||!game.user?.isGM||!rlOwner(rlActor(weapon)))return false;
+ const profile=rlReloadProfile(weapon);
+ if(!profile||rlActions(weapon).some(a=>rlReloadName(a?.name)))return false;
+ const key=weapon.uuid;
+ if(!key||RL_ACTION_BUILDING.has(key))return false;
+ const Action=globalThis.pf1?.models?.components?.Action;
+ if(typeof Action?.create!=='function'){
+  console.warn('[PF1FR][Reload] Native PF1 Action.create unavailable; cannot generate action.',weapon.name);
+  return false;
+ }
+ RL_ACTION_BUILDING.add(key);
+ try{
+  if(rlActions(weapon).some(a=>rlReloadName(a?.name)))return false;
+  const created=await Action.create({
+   name:'Recharger',
+   actionType:'other',
+   hasAttack:false,
+   activation:{type:profile.base},
+   ammo:{type:null,cost:0}
+  },{parent:weapon});
+  const action=Array.isArray(created)?created[0]:created;
+  console.info('[PF1FR][Reload] Created native Reload action',weapon.name,
+   profile.kind,profile.base,action?.id);
+  return !!action;
+ }catch(error){
+  console.error('[PF1FR][Reload] Native Reload action creation failed',weapon?.name,error);
+  return false;
+ }finally{RL_ACTION_BUILDING.delete(key);}
+}
+async function rlScanReloadActions(){
+ if(!game.user?.isGM||!rlAllowed())return;
+ const actors=[...(game.actors?.contents??[])];
+ for(const scene of game.scenes?.contents??[]){
+  for(const token of scene.tokens?.contents??[]){
+   if(token?.actor&&!actors.includes(token.actor))actors.push(token.actor);
+  }
+ }
+ for(const actor of actors){
+  for(const item of rlItems(actor)){
+   if(item?.type==='weapon')await rlEnsureReloadAction(item);
+  }
+ }
+}
 async function rlAutoConfigure(weapon){
  const existing=rlState(weapon);if(existing)return existing;
  const inferred=rlInfer(weapon);
@@ -678,6 +752,7 @@ Hooks.once('ready',async()=>{
   },
   configure:rlConfigure,reload:rlReload,unload:rlUnload,
   infer:rlInfer,initialize:rlAutoConfigure,
+   ensureReloadAction:rlEnsureReloadAction,reloadProfile:rlReloadProfile,
   lastDiagnostic:()=>RL_LAST?{...RL_LAST}:null,
   ammoDiagnostic:rlAmmoDiagnostic
  });
@@ -692,6 +767,15 @@ Hooks.once('ready',async()=>{
  }
  rlInstall();
  rlInstallInstantUse();
+ if(game.user?.isGM){
+  Hooks.on('createItem',item=>{
+   if(item?.type==='weapon')void rlEnsureReloadAction(item);
+  });
+  Hooks.on('updateItem',item=>{
+   if(item?.type==='weapon')void rlEnsureReloadAction(item);
+  });
+  void rlScanReloadActions();
+ }
  Hooks.on('renderItemSheet',rlSheetWidget);
  Hooks.on('renderItemSheetV2',rlSheetWidget);
 });
