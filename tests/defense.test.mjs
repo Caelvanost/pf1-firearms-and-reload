@@ -293,15 +293,16 @@ test("owner permission, invalid indexes, no-attack action, late preparation and 
  const notOwner={...v.actor,testUserPermission:()=>false};
  const otherUse={...use,actor:notOwner,item:{...v.weapon,actor:notOwner}};
  assert.throws(()=>api.prepareAttackOverride({actionUse:otherUse,defense:"touch"}),/OWNER/);
- use.shared.chatAttacks.push({});
- assert.throws(()=>api.prepareAttackOverride({actionUse:use,defense:"touch"}),/before native/);
- use.shared.chatAttacks=[];
- api.prepareAttackOverride({actionUse:use,defense:"touch"});
+ const lateUse=v.makeUse();
+ lateUse.shared.chatAttacks.push({});
+ assert.throws(()=>api.prepareAttackOverride({actionUse:lateUse,defense:"touch"}),/before native/);
+ const activeUse=v.makeUse();
+ api.prepareAttackOverride({actionUse:activeUse,defense:"touch"});
  const adapter=createPF1AEDefenseProvider({
   defense:api,gameRef:v.gameRef,canvasRef:v.canvasRef,
   fromUuidRef:async()=>v.origin});
  const ctx={actor:v.actor,item:v.weapon,action:v.nativeAction,
-  actionUse:use,attackIndex:null,attackerToken:v.origin.uuid,targetToken:v.target};
+  actionUse:activeUse,attackIndex:null,attackerToken:v.origin.uuid,targetToken:v.target};
  assert.equal((await adapter.resolve(ctx)).type,"normal",
   "unknown index cannot consume or apply a prepared override");
  assert.equal(api.finishResolvedAttack({sourceMessageId:null,actorUuid:v.actor.uuid,
