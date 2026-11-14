@@ -1085,8 +1085,10 @@ function rlInstallInstantUse(){
   return wrapped(...args);
  };
  const itemWrapper=function(wrapped,...args){
-  const options=args[0];
-  if(args.length&&options&&typeof options==='object'){
+  // Native use() accepts no argument; preserve this default while still
+  // applying the same instant-Reload behavior as the previous wrapper.
+  const options=args[0]??{};
+  if(options&&typeof options==='object'){
    const actions=rlActions(this);
    const action=options.actionId!=null?
     actions.find(a=>a?.id===options.actionId):actions[0];
