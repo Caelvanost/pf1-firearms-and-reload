@@ -1254,6 +1254,8 @@ Hooks.once('ready',async()=>{
  });
  Hooks.on('pf1PostActionUse',(use,message)=>{
   mod.api.defense.bindActionUseMessage(use,message);
+  if(!mod.api.defense.hasPreparedForUse(use))
+   mod.api.defense.releaseNativeActionUse(use);
  });
  // PF1AE emits this only after all target comparisons for the roll.
  Hooks.on('pf1aeAttackResolution',event=>{
