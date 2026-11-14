@@ -37,6 +37,17 @@
       "ReloadFailed": "Reload failed",
       "AmmoGuidance": "Check native PF1 Ammunition Items, their subtype and quantity. The Reload action must have ammunition set to None.",
       "Loading": "Loading"
+    },
+    "Defense": {
+      "Prepared": "Defense override prepared for attack {index}.",
+      "Consumed": "Defense override consumed for attack {index}.",
+      "Cancelled": "Defense override cancelled.",
+      "Expired": "Temporary override expired.",
+      "NoCurrentUse": "No unique active native attack use was found.",
+      "InvalidUse": "Invalid or completed native attack use.",
+      "NoIndex": "Attack index not verified: override not applied.",
+      "Permission": "Actor OWNER permission required.",
+      "Diagnostics": "Defense override diagnostic"
     }
   }
 }
