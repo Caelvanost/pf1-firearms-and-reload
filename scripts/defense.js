@@ -9,6 +9,7 @@ export function createFirearmDefenseAPI({namespace="pf1-firearms-and-reload",now
  const completedUses=new WeakSet();
  const currentUses=new Set();
  function captureNativeActionUse(use){
+  prunePrepared();
   const identity=nativeIdentity(use);
   if(!identity)return false;
   const existing=[...currentUses].find(x=>x.use===use);
@@ -131,6 +132,16 @@ export function createFirearmDefenseAPI({namespace="pf1-firearms-and-reload",now
   if(!Number.isSafeInteger(idx)||idx<0||actorUuid!==entry.actorUuid||
      itemUuid!==entry.itemUuid||actionId!==entry.actionId)return null;
   return entry.entries.get(idx)??null;
+ }
+ function hasPreparedForUse(actionUse){
+  const entry=prepared.get(actionUse);
+  return !!entry&&!entry.closed&&entry.entries.size>0;
+ }
+ function localizeOverride(key,data={}){
+  const full="PF1FR.Defense."+key;
+  if(typeof game!=="undefined"&&typeof game.i18n?.format==="function")
+   return game.i18n.format(full,data);
+  return full;
  }
  function bindActionUseMessage(actionUse,message){
   const entry=prepared.get(actionUse);
@@ -358,7 +369,7 @@ export function createFirearmDefenseAPI({namespace="pf1-firearms-and-reload",now
  return Object.freeze({getWeaponProfile,resolveForAttack,lastDiagnostic,
   prepareAttackOverride,cancelPreparedAttackOverride,prepareForCurrentUse,
   captureNativeActionUse,releaseNativeActionUse,findCurrentActionUse,
-  bindActionUseMessage,finishResolvedAttack,
+  bindActionUseMessage,finishResolvedAttack,hasPreparedForUse,localizeOverride,
   lastPreparedDiagnostic:()=>preparedDiagnostic?{...preparedDiagnostic}:null,
   lastPreparedResolution:()=>lastPreparedResolution?{...lastPreparedResolution}:null,
   pendingPreparedOverrides:()=>{prunePrepared();return [...activePrepared].reduce((n,e)=>n+e.entries.size,0)},
