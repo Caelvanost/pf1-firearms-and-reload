@@ -87,12 +87,32 @@ class NativeActionUseStub {
  use(options={}){return this.parent.use({...options,actionId:this.id})}
 }
 NativeActionUseStub.create=actionType.create;
+// Test-only libWrapper simulation: registration performs the chaining;
+// production code must never write native .prototype.use directly.
+const wrapperRegistrations=[];
+const simulatedLibWrapper={
+ register(namespace,target,callback,type){
+  assert.equal(namespace,'pf1-firearms-and-reload');
+  assert.ok(['WRAPPER','MIXED'].includes(type));
+  const proto=target==='pf1.components.ItemAction.prototype.use'
+   ?NativeActionUseStub.prototype:
+   target==='CONFIG.Item.documentClass.prototype.use'
+   ?NativeItemUseStub.prototype:null;
+  if(!proto)throw new Error('Unexpected libWrapper target: '+target);
+  const original=proto.use;
+  proto.use=function(...args){
+   return callback.call(this,(...next)=>original.apply(this,next),...args);
+  };
+  wrapperRegistrations.push({target,type});
+  return wrapperRegistrations.length;
+ }
+};
 class ExplosionTestRoll {
  constructor(formula){this.formula=formula;this.total=7}
  async evaluate(){count.explosionRolls=(count.explosionRolls??0)+1;return this}
  async render(){return '<div class="dice-roll">7</div>'}
 }
-const context={console,Math,Number,Map,Set,WeakMap,WeakSet,Symbol,Roll:ExplosionTestRoll,
+const context={console,Math,Number,Map,Set,WeakMap,WeakSet,Symbol,Roll:ExplosionTestRoll,libWrapper:simulatedLibWrapper,
  structuredClone,globalThis:null,foundry:{applications:{instances:new Map()},utils:{deepClone:structuredClone,
  escapeHTML:x=>x}},game:{user:{isGM:true},actors:{contents:[actor]},scenes:{contents:[]},modules:new Map([[
  'pf1-firearms-and-reload',{active:true,api:{}}]]),
@@ -247,8 +267,11 @@ context.globalThis=context;vm.createContext(context);vm.runInContext(code,contex
  // entry point, NOT the newer models.components.Action.use().
  assert.equal(typeof context.pf1.models.components.Action.prototype?.use,'undefined');
  assert.equal(context.pf1.components.ItemAction,NativeActionUseStub);
- assert.equal(NativeActionUseStub.prototype.use.pf1frInstantReloadWrapped,true,
-  'old PF1 ItemAction.use is patched before the configuration dialog');
+ assert.ok(wrapperRegistrations.some(x=>x.target==='pf1.components.ItemAction.prototype.use'&&x.type==='MIXED'),
+  'native PF1 ItemAction is registered as libWrapper MIXED');
+ assert.ok(wrapperRegistrations.some(x=>x.target==='CONFIG.Item.documentClass.prototype.use'&&x.type==='WRAPPER'),
+  'native PF1 Item use is registered as libWrapper WRAPPER');
+ assert.equal(wrapperRegistrations.length,2,'only one wrapper per native owner');
  const reloadInstant=nativeWeapon.use({actionId:'reload-direct',rollMode:'gmroll'});
  assert.equal(reloadInstant.options.skipDialog,true,'Reload is immediate');
  assert.equal(reloadInstant.options.rollMode,'gmroll','roll mode preserved');
@@ -262,6 +285,13 @@ context.globalThis=context;vm.createContext(context);vm.runInContext(code,contex
  const initialWrapper=NativeItemUseStub.prototype.use;
  vm.runInContext('rlInstallInstantUse()',context);
  assert.equal(NativeItemUseStub.prototype.use,initialWrapper,'hook is idempotent');
+ assert.equal(wrapperRegistrations.length,2,'duplicate initialization does not re-register');
+ context.libWrapper=null;
+ assert.equal(vm.runInContext('rlInstallInstantUse()',context),false,
+  'no libWrapper: never monkey-patch native methods');
+ assert.equal(NativeItemUseStub.prototype.use,initialWrapper,
+  'missing libWrapper fallback preserves native prototype');
+ context.libWrapper=simulatedLibWrapper;
  const nativeFeat=makeNative({id:'reloadFeat',type:'feat',name:'Recharger',actor},
   [{id:'activate',name:'Utiliser',hasAttack:false,actionType:'other'}]);
  assert.equal(nativeFeat.use({actionId:'activate'}).options.skipDialog,true,

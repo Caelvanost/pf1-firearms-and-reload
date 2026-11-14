@@ -1,3 +1,12 @@
+## 0.4.3 — libWrapper compatibility for native PF1 use methods
+
+- Fix the libWrapper detected non-libWrapper wrapping warning on ItemPF.prototype.use. Remove direct assignments to native prototype.use methods.
+- Register PF1 ItemPF.use through libWrapper WRAPPER (always forwards the call). Register ItemAction.use through MIXED, since a recognized Reload action deliberately routes directly to weapon.use({actionId,skipDialog:true}).
+- Keep native attack actions and their arguments unchanged, preserve immediate Reload and ActionSelector closing, and avoid changes to ammunition, misfire, explosion and defense providers.
+- Register each native method owner once, even if several global names refer to it.
+- Require lib-wrapper in module.json. If it is missing at runtime, log a warning rather than monkey-patching native methods.
+- Regression tests cover the libWrapper chain, idempotence, absent-library behavior, Reload and normal attacks.
+
 ## 0.4.2 — Generic native ActionUse defense overrides (experimental)
 
 - New **class-neutral** API `api.defense.prepareAttackOverride({actionUse,attackIndex,defense,reason})` for a precise native PF1 ActionUse and zero-based attack index. Supports `touch` or `normal`; never changes persistent `action.touch` or weapon flags.
