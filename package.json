@@ -4,6 +4,6 @@
   "version": "0.1.0-dev.0",
   "type": "module",
   "scripts": {
-    "test": "node --test tests/migration.test.mjs tests/ownership.test.mjs && node tests/reload-core.test.cjs"
+    "test": "node --test tests/migration.test.mjs tests/ownership.test.mjs tests/defense.test.mjs && node tests/reload-core.test.cjs"
   }
 }
