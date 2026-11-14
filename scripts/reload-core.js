@@ -1,3 +1,4 @@
+import { createFirearmDefenseAPI } from "./defense.js";
 import { migrateLegacyReload } from "./migration.js";
 /**
  * PF1AE reload core, Foundry 13 / PF1 11.11.
@@ -1222,6 +1223,9 @@ Hooks.once('ready',async()=>{
  const mod=game.modules.get(RL_NS);
  if(!mod)return;
  mod.api??={};
+ // Standalone rule selection: not registered with PF1AE until its public
+ // attackResolution contract is released and verified.
+ mod.api.defense=createFirearmDefenseAPI();
  mod.api.reload=Object.freeze({
   getState:weapon=>rlState(weapon),
   canFire:(weapon,action,attacks=1)=>{

@@ -1,3 +1,13 @@
+## 0.4.0 — Standalone firearm target-defense resolver (experimental)
+
+- Add `api.defense.getWeaponProfile(weapon,action)`, `resolveForAttack(context)`, `lastDiagnostic()`, `setAttackOverride()`, `cancelAttackOverride()` and `integrationStatus()`.
+- Primitive firearms: touch AC in first range increment, maximum 5; advanced firearms: touch AC in first five, maximum 10. Beyond contact range, choose normal AC. Out-of-range and unknown measurements fail closed.
+- Respect explicit firearm flags and recognizable native metadata, plus conservative name fallback. Resolve measured distance in imperial or metric units; do not duplicate existing range penalties or attack comparison.
+- Deadeye-style exceptions require validated conditions and a precise actor/weapon/action/attack ID; use once, cancel explicitly, expire after 120 seconds. Independent indices for double-barrel attacks.
+- Add independent test suite for boundaries, imperial/metric, configurations, overrides, unusual attacks and regressions.
+- **Not yet connected to PF1AE:** the published PF1AE v1.24.6 has no `api.attackResolution` provider contract. This release exposes a standalone resolver but does NOT change live attack targeting. Native target distance measurement and translated weapon UI are deferred. See `docs/FIREARM-DEFENSE.md`.
+- Existing ammo, reload, long feu and explosion processing unchanged.
+
 ## 0.3.5 — Set nonmagical exploded firearm HP to zero
 
 - Fix explosions that left the weapon's current hit points unchanged.

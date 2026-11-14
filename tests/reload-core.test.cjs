@@ -3,7 +3,7 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const path=require('node:path');
 const vm=require('node:vm');
-const code=fs.readFileSync(path.resolve(__dirname,'../scripts/reload-core.js'),'utf8').replace(/^import .*migration\.js.*\n/m,'');
+const code=fs.readFileSync(path.resolve(__dirname,'../scripts/reload-core.js'),'utf8').replace(/^import .*\.js.*\n/gm,'');
 const domHandlers=[];
 const createdMessages=[];
 const listeners=new Map(),once=new Map(),settings=new Map([
@@ -107,6 +107,7 @@ const context={console,Math,Number,Map,Set,WeakMap,WeakSet,Symbol,Roll:Explosion
 };
 context.CONFIG={Item:{documentClass:NativeItemUseStub}};
 context.migrateLegacyReload=async()=>({migrated:0});
+context.createFirearmDefenseAPI=()=>({getWeaponProfile:()=>null,resolveForAttack:()=>null});
 context.globalThis=context;vm.createContext(context);vm.runInContext(code,context);
 (async()=>{
  for(const fn of once.get('init')??[])fn();
