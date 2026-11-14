@@ -1,4 +1,26 @@
-# Firearm defense resolver — experimental v0.4.0
+# Firearm defense resolution — PF1AE v1.25.0 integration (PF1FR v0.4.1)
+
+PF1AE now publishes `api.attackResolution.registerDefenseProvider({id,priority,resolve})`. PF1 Firearms & Reload registers a provider on startup when PF1AE is active; no change to PF1's native Action `touch` checkbox, attack roll, damage, ammunition, reload or misfire scripts.
+
+**Action configuration**: Keep the native `Contact` / `Touch` checkbox unchecked on ordinary firearms, and set PF1AE's per-action defense selector to **auto**. A forced PF1AE action defense override takes precedence over the firearm provider.
+
+**Distance**: The provider calls PF1AE's **`api.range.measure(origin,target,canvas.grid)`** to measure the nearest occupied grid cells; it uses **`api.range.convert(value,sceneUnit,weaponUnit)`** for the same 5 ft = 1.5 m convention as PF1AE's range penalty logic. It reads the actual PF1 Action range increment and units and selects touch AC for early firearms within one increment and advanced firearms within five. After that it selects normal AC; outside the allowed five/ten increments it returns `manual`, as the generic provider contract cannot block attacks on its own. Range penalties remain owned exclusively by PF1AE and are never added twice.
+
+**Evidence safety**: Only ranged weapon attacks on recognizable firearms are affected. The attacker Token UUID must resolve unambiguously and both Tokens must belong to the active scene. Missing metadata, targets, distances, other-scene or scatter situations return `manual` for a recognized firearm (or `null` for non-firearms); no silent AC guess. Multiple targets without verified per-roll matching remain indeterminate in PF1AE itself.
+
+**Deadeye**: `api.defense.setAttackOverride` still requires a validated single-shot identity. The provider only accepts a naturally verified `sourceMessageId:attackIndex` identity from PF1AE, so a future Deadeye Script Call needs a validated pre-roll binding strategy before the override can be reliably consumed. Do not treat Deadeye as fully automated in this release.
+
+**Testing**: Use the actual pistol with 20 ft range on a metric 1.5 m grid. At 4.5 m, PF1AE's resolved `defense.type` should be `touch`; at 12 m, it should be `normal`. Inspect:
+```javascript
+console.log(game.modules.get('pf1-automation-engine')?.api?.attackResolution?.listDefenseProviders());
+console.log(game.modules.get('pf1-automation-engine')?.api?.attackResolution?.lastDiagnostic());
+console.log(game.modules.get('pf1-firearms-and-reload')?.api?.defense?.lastDiagnostic());
+```
+The registration list should include `pf1-firearms-and-reload` with priority 100. PF1AE's full hit/AC comparison still depends on unambiguous native target, d20 and any concealment checks.
+
+If PF1AE is absent, PF1FR's reload, ammunition, misfire and explosion features still work independently. No provider is registered.
+
+## Original standalone resolver (v0.4.0)
 
 This is a standalone **rules selection** API for Foundry 13 / PF1 11.11. It does **not** roll, alter an attack, calculate range penalties, compare against AC, or declare a hit.
 

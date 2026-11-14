@@ -1,7 +1,7 @@
 /**
  * PF1 Firearms & Reload — independent firearm defense selection engine.
  * Foundry 13 / PF1 11.11. NEVER rolls attacks, computes attack penalties,
- * compares AC, or invokes PF1 Automation Engine's unpublished API.
+ * compares AC, or alters native PF1 ItemAction.touch.
  */
 export function createFirearmDefenseAPI({namespace="pf1-firearms-and-reload",now=()=>Date.now()}={}){
  const overrides=new Map();
@@ -107,7 +107,7 @@ export function createFirearmDefenseAPI({namespace="pf1-firearms-and-reload",now
   let u=str(units).toLowerCase();
   if(u==="scene")u=str(sceneUnits).toLowerCase();
   if(["m","meter","meters","mètre","mètres"].includes(u))return value;
-  if(["ft","feet","foot","pieds"].includes(u))return value*0.3048;
+  if(["ft","feet","foot","pieds"].includes(u))return value*0.3;
   return null;
  }
  function identity(context){
@@ -188,6 +188,91 @@ export function createFirearmDefenseAPI({namespace="pf1-firearms-and-reload",now
  const lastDiagnostic=()=>last?{...last}:null;
  return Object.freeze({getWeaponProfile,resolveForAttack,lastDiagnostic,
   setAttackOverride,cancelAttackOverride,pendingOverrides:()=>{clean();return overrides.size},
-  integrationStatus:()=>({available:false,reason:
-   "PF1AE public attackResolution provider contract not available; standalone resolver only"})});
+  integrationStatus:()=>({available:typeof game!=="undefined"&&
+   !!game.modules?.get?.("pf1-automation-engine")?.api?.attackResolution?.registerDefenseProvider,
+   reason:"Requires published PF1AE v1.25+ attackResolution provider and native range measurement"})});
+}
+
+/**
+ * Adapter for the REAL PF1AE v1.25.0 public contract:
+ * registerDefenseProvider({id,priority,resolve(context)}).
+ * Uses PF1AE range.measure() (occupied token cells) and range.convert()
+ * (table scale: 5 ft = 1.5 m). No second range penalty is ever applied.
+ */
+export function createPF1AEDefenseProvider({defense,gameRef,canvasRef,fromUuidRef}={}){
+ const providerId="pf1-firearms-and-reload";
+ return Object.freeze({
+  id:providerId,priority:100,
+  async resolve(context){
+   const weapon=context?.item??context?.action?.item??context?.actionUse?.item;
+   const action=context?.action??context?.actionUse?.action;
+   if(weapon?.type!=="weapon"||!action||action.hasAttack!==true||
+      action.actionType!=="rwak")return null;
+   const profile=defense.getWeaponProfile(weapon,action);
+   if(profile.status==="not-firearm")return null;
+   // Unknown ranged weapons (bows, slings, custom throwing weapons) must
+   // remain entirely outside PF1FR. Only an identifiable firearm can
+   // request a manual ruling because its firearm-specific data are missing.
+   if(profile.status==="unknown"&&!profile.category){
+    const nativeType=String(weapon.system?.weaponType??"").toLowerCase();
+    const recognized=/(?:pistol|pistolet|musket|mousquet|blunderbuss|tromblon|arquebus|revolver|rifle|shotgun)/i
+     .test(String(weapon.name??""));
+    const explicit=weapon.getFlag?.("pf1-firearms-and-reload","firearmCategory");
+    if(nativeType!=="firearm"&&nativeType!=="gun"&&!recognized&&!explicit)
+     return null;
+   }
+   if(profile.status!=="ok")return {
+    type:"manual",reason:"PF1FR: "+(profile.reason??"unknown firearm profile")};
+   const module=gameRef?.modules?.get?.("pf1-automation-engine");
+   const rangeApi=module?.active?module.api?.range:null;
+   const scene=canvasRef?.scene,grid=canvasRef?.grid;
+   if(!rangeApi?.measure||!rangeApi?.convert||!scene||!grid)return {
+    type:"manual",reason:"PF1FR: native PF1AE range measurement unavailable"};
+   const target=context?.targetToken;
+   const tokenUuid=context?.attackerToken;
+   let origin=null;
+   if(tokenUuid&&typeof fromUuidRef==="function"){
+    try{origin=await fromUuidRef(tokenUuid)}catch(_){}
+   }
+   // If the Actor has exactly one token on the displayed scene, it is
+   // unambiguous even when the hook omitted attackerToken.
+   if(!origin){
+    const tokens=context?.actor?.getActiveTokens?.()??[];
+    if(tokens.length===1)origin=tokens[0];
+   }
+   if(!origin||!target)return {
+    type:"manual",reason:"PF1FR: attacker or target token not uniquely available"};
+   const tokenScene=token=>(token?.document??token)?.parent?.id??
+    token?.scene?.id??null;
+   if(tokenScene(origin)!==scene.id||tokenScene(target)!==scene.id)return {
+    type:"manual",reason:"PF1FR: tokens are not on the measured scene"};
+   const raw=rangeApi.measure(origin,target,grid);
+   if(typeof raw!=="number"||!Number.isFinite(raw)||raw<0)return {
+    type:"manual",reason:"PF1FR: occupied-cell distance unavailable"};
+   const unit=String(scene.grid?.units??"").toLowerCase();
+   const sceneUnit=["m","meter","meters","metre","metres","mètre","mètres"]
+    .includes(unit)?"m":["ft","feet","foot","pied","pieds"]
+    .includes(unit)?"ft":null;
+   const destination=profile.range.unit==="scene"?sceneUnit:profile.range.unit;
+   const measured=sceneUnit&&destination?
+    rangeApi.convert(raw,sceneUnit,destination):null;
+   if(typeof measured!=="number"||!Number.isFinite(measured)||measured<0)
+    return {type:"manual",reason:"PF1FR: PF1AE range unit conversion unavailable"};
+   const result=defense.resolveForAttack({
+    actor:context.actor,weapon,action,
+    actorUuid:context.actor?.uuid,itemUuid:weapon.uuid,
+    actionId:action.id,attackIndex:context.attackIndex,
+    // Attack IDs cannot be guessed: use the real message + native index,
+    // only when BOTH are supplied. Prevents a Deadeye override leak.
+    attackId:context.sourceMessageId&&Number.isSafeInteger(context.attackIndex)
+     ?context.sourceMessageId+":"+context.attackIndex:null,
+    distance:measured,distanceUnits:destination,sceneUnits:sceneUnit,
+    scatter:action.scatter===true
+   });
+   if(!result||result.status==="not-firearm")return null;
+   if(result.status!=="ok")return {type:"manual",
+    reason:"PF1FR: "+(result.reason??result.status)};
+   return {type:result.type,reason:result.reason};
+  }
+ });
 }

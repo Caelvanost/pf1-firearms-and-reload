@@ -1,3 +1,12 @@
+## 0.4.1 — Live PF1AE firearm touch AC selection (experimental)
+
+- Register a true `attackResolution.registerDefenseProvider` with PF1AE **v1.25.0** (priority 100) when available; keep PF1FR functional without that module.
+- Reuse PF1AE's `api.range.measure()` for closest occupied-token distance and `api.range.convert()` for its existing metric/imperial conversion, including the 5 ft = 1.5 m table convention.
+- For ordinary ranged firearm attacks, automatically request **touch** AC for primitive weapons in first increment / advanced in first five, and **normal** AC beyond. Unmeasurable or out-of-range cases are left **manual**, not falsely resolved. Existing explicit action defense settings retain precedence.
+- Preserve native PF1 Action `Contact` checkbox, attack rolls, ammunition, range penalties, Reload, misfire, explosions and Quick Clear scripts. No double range penalty and no synthetic attack roll.
+- Tests cover PF1AE adapter (token occupied-cell measurement, precise range boundaries, missing tokens and wrong scenes) and complete existing reload regression.
+- **Known limitations:** Deadeye ability Script Call pre-roll binding is not complete; PF1AE may lack verified target mapping for simultaneous/multitarget attacks. Live Foundry validation is required.
+
 ## 0.4.0 — Standalone firearm target-defense resolver (experimental)
 
 - Add `api.defense.getWeaponProfile(weapon,action)`, `resolveForAttack(context)`, `lastDiagnostic()`, `setAttackOverride()`, `cancelAttackOverride()` and `integrationStatus()`.

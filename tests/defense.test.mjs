@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {createFirearmDefenseAPI} from "../scripts/defense.js";
+import {createFirearmDefenseAPI,createPF1AEDefenseProvider} from "../scripts/defense.js";
 
 function firearm(category="early",range=6,units="m"){
  const flags={firearmCategory:category,rangeIncrement:range,rangeUnits:units};
@@ -98,4 +98,56 @@ test("missing increment or unsupported category fail closed; standalone API repo
  const gun=firearm();delete gun.getFlag;gun.name="Pistolet custom";gun.system={};
  assert.equal(api.resolveForAttack(context(gun,6)).status,"unresolved");
  assert.equal(api.integrationStatus().available,false);
+});
+
+test("PF1AE v1.25 provider uses the SAME occupied-cell measurement as range penalties",async()=>{
+ const defense=createFirearmDefenseAPI();
+ const weapon=firearm("early",20,"ft");
+ const origin={uuid:"Scene.scene.Token.origin",parent:{id:"scene"}};
+ const target={uuid:"Scene.scene.Token.target",parent:{id:"scene"}};
+ const scene={id:"scene",grid:{units:"m"}};
+ let calls=0,receivedGrid=null;
+ const grid={};
+ const measured={distance:6};
+ const api={measure(a,b,g){calls++;assert.equal(a,origin);assert.equal(b,target);
+   receivedGrid=g;return measured.distance;},
+  convert(value,from,to){assert.equal(from,"m");assert.equal(to,"ft");return value/0.3}};
+ const provider=createPF1AEDefenseProvider({
+  defense,gameRef:{modules:new Map([["pf1-automation-engine",{
+    active:true,api:{range:api}}]])},canvasRef:{scene,grid},
+  fromUuidRef:async uuid=>uuid===origin.uuid?origin:null});
+ const ctx={actor:{uuid:"Actor.a"},item:weapon,action,attackerToken:origin.uuid,
+  targetToken:target,attackIndex:0,sourceMessageId:"msg-1"};
+ assert.equal(provider.id,"pf1-firearms-and-reload");
+ assert.equal(provider.priority,100);
+ assert.equal((await provider.resolve(ctx)).type,"touch");
+ measured.distance=12;
+ assert.equal((await provider.resolve(ctx)).type,"normal");
+ measured.distance=30;
+ assert.equal((await provider.resolve(ctx)).type,"normal");
+ measured.distance=30.1;
+ const outside=await provider.resolve(ctx);
+ assert.equal(outside.type,"manual");
+ assert.match(outside.reason,/beyond-maximum-range/);
+ assert.equal(receivedGrid,grid);
+ assert.equal(calls,4);
+ assert.equal(action.touch,undefined,"native PF1 Contact checkbox is never mutated");
+});
+test("PF1AE provider returns manual safely if range/scene or target evidence is absent",async()=>{
+ const defense=createFirearmDefenseAPI();
+ const gun=firearm();
+ const target={uuid:"Scene.scene.Token.target",parent:{id:"scene"}};
+ const grid={};
+ const api={measure:()=>null,convert:()=>null};
+ const adapter=createPF1AEDefenseProvider({
+  defense,gameRef:{modules:new Map([["pf1-automation-engine",{
+   active:true,api:{range:api}}]])},canvasRef:{scene:{id:"scene",grid:{units:"m"}},grid},
+  fromUuidRef:async()=>({uuid:"Scene.scene.Token.origin",parent:{id:"scene"}})});
+ const base={actor:{uuid:"Actor.a"},item:gun,action,attackerToken:"origin",
+  targetToken:target};
+ assert.equal((await adapter.resolve(base)).type,"manual");
+ assert.equal(await adapter.resolve({...base,item:{type:"weapon",name:"Arbalète",
+   system:{}}}),null);
+ const misplaced={...base,targetToken:{...target,parent:{id:"other"}}};
+ assert.equal((await adapter.resolve(misplaced)).type,"manual");
 });
