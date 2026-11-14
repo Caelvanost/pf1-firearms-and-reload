@@ -200,6 +200,10 @@ test("native ActionUse: exact index 0 override wins; different use, actor, actio
   actionId:v.nativeAction.id,attackIndex:0,defense:{type:"touch",provider:"pf1-firearms-and-reload"}
  }),true);
  assert.equal(api.pendingPreparedOverrides(),0);
+ assert.equal(api.lastPreparedResolution().defense,"touch");
+ assert.equal(api.lastPreparedResolution().attackIndex,0);
+ assert.throws(()=>api.prepareAttackOverride({actionUse:use,defense:"normal"}),
+  /already finished/);
  assert.equal((await provider.resolve(ctx(use))).type,"normal");
  assert.equal((await provider.resolve(ctx(other))).type,"normal");
 });
