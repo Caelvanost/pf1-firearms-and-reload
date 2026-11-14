@@ -151,3 +151,172 @@ test("PF1AE provider returns manual safely if range/scene or target evidence is 
  const misplaced={...base,targetToken:{...target,parent:{id:"other"}}};
  assert.equal((await adapter.resolve(misplaced)).type,"manual");
 });
+
+function nativeScenario({advanced=false}={}){
+ const actor={uuid:"Actor.owner",testUserPermission:()=>true};
+ const weapon=firearm(advanced?"advanced":"early",6,"m");
+ weapon.actor=actor;weapon.uuid="Actor.owner.Item.gun";
+ const nativeAction={id:"fire",hasAttack:true,actionType:"rwak",parent:weapon};
+ const makeUse=()=>({actor,item:weapon,action:nativeAction,shared:{chatAttacks:[]}});
+ const origin={uuid:"Scene.scene.Token.origin",parent:{id:"scene"}};
+ const target={uuid:"Scene.scene.Token.target",parent:{id:"scene"},actor:{
+  uuid:"Actor.target",system:{attributes:{ac:{normal:{total:18},touch:{total:12}}}}}};
+ let distance=12;
+ const range={measure:()=>distance,convert:(n)=>n};
+ const gameRef={modules:new Map([["pf1-automation-engine",{
+  active:true,api:{range}}]])};
+ const canvasRef={scene:{id:"scene",grid:{units:"m"}},grid:{}};
+ return {actor,weapon,nativeAction,makeUse,origin,target,gameRef,
+  canvasRef,range,setDistance:n=>distance=n};
+}
+test("native ActionUse: exact index 0 override wins; different use, actor, action and index stay isolated",async()=>{
+ globalThis.game={user:{isGM:false}};
+ const v=nativeScenario(),api=createFirearmDefenseAPI();
+ const provider=createPF1AEDefenseProvider({defense:api,
+  gameRef:v.gameRef,canvasRef:v.canvasRef,fromUuidRef:async()=>v.origin});
+ const use=v.makeUse(),other=v.makeUse();
+ const ctx=(actionUse,attackIndex=0,actor=v.actor)=>({
+  actor,item:v.weapon,action:v.nativeAction,actionUse,
+  attackerToken:v.origin.uuid,targetToken:v.target,attackIndex
+ });
+ assert.equal(api.captureNativeActionUse(use),true);
+ assert.equal(api.prepareAttackOverride({actionUse:use,attackIndex:0,
+  defense:"touch",reason:"external-script"}),true);
+ assert.equal(api.pendingPreparedOverrides(),1);
+ assert.equal((await provider.resolve(ctx(other))).type,"normal");
+ assert.equal((await provider.resolve(ctx(use,1))).type,"normal");
+ assert.equal((await provider.resolve(ctx(use,0,{
+  uuid:"Actor.other",testUserPermission:()=>true
+ }))).type,"normal");
+ const result=await provider.resolve(ctx(use));
+ assert.equal(result.type,"touch");
+ assert.equal(result.reason,"external-script");
+ assert.equal(api.lastDiagnostic().overrideSource,"actionUse");
+ // Multiple target comparisons in one attack must NOT consume early.
+ assert.equal((await provider.resolve(ctx(use))).type,"touch");
+ assert.equal(api.bindActionUseMessage(use,{id:"Chat-10"}),true);
+ assert.equal(api.finishResolvedAttack({
+  sourceMessageId:"Chat-10",actorUuid:v.actor.uuid,itemUuid:v.weapon.uuid,
+  actionId:v.nativeAction.id,attackIndex:0,defense:{type:"touch",provider:"pf1-firearms-and-reload"}
+ }),true);
+ assert.equal(api.pendingPreparedOverrides(),0);
+ assert.equal((await provider.resolve(ctx(use))).type,"normal");
+ assert.equal((await provider.resolve(ctx(other))).type,"normal");
+});
+test("multiple barrel indices and multiple targets: preserve other index until its own completion",async()=>{
+ globalThis.game={user:{isGM:true}};
+ const v=nativeScenario(),api=createFirearmDefenseAPI();
+ const provider=createPF1AEDefenseProvider({
+  defense:api,gameRef:v.gameRef,canvasRef:v.canvasRef,
+  fromUuidRef:async()=>v.origin
+ });
+ const use=v.makeUse(),c=i=>({actor:v.actor,item:v.weapon,action:v.nativeAction,
+  actionUse:use,attackIndex:i,targetToken:v.target,attackerToken:v.origin.uuid});
+ api.captureNativeActionUse(use);
+ api.prepareAttackOverride({actionUse:use,attackIndex:0,defense:"touch",reason:"override-a"});
+ api.prepareAttackOverride({actionUse:use,attackIndex:1,defense:"normal",reason:"override-b"});
+ assert.equal((await provider.resolve(c(0))).type,"touch");
+ assert.equal((await provider.resolve(c(1))).type,"normal");
+ // Another target from the SAME attack uses the same override and still
+ // cannot leak into the following attack index.
+ const secondTarget={...v.target,uuid:"Scene.scene.Token.other"};
+ assert.equal((await provider.resolve({...c(0),targetToken:secondTarget})).type,"touch");
+ api.bindActionUseMessage(use,{id:"card"});
+ assert.equal(api.finishResolvedAttack({sourceMessageId:"card",actorUuid:v.actor.uuid,
+  itemUuid:v.weapon.uuid,actionId:"fire",attackIndex:0}),true);
+ assert.equal(api.pendingPreparedOverrides(),1);
+ assert.equal((await provider.resolve(c(0))).type,"normal");
+ assert.equal((await provider.resolve(c(1))).type,"normal");
+ assert.equal(api.finishResolvedAttack({sourceMessageId:"card",actorUuid:v.actor.uuid,
+  itemUuid:v.weapon.uuid,actionId:"fire",attackIndex:1}),true);
+ assert.equal(api.pendingPreparedOverrides(),0);
+});
+test("cancelled ActionUse cannot affect next attack; ambiguous simultaneous uses refuse lookup",()=>{
+ globalThis.game={user:{isGM:true}};
+ const v=nativeScenario(),api=createFirearmDefenseAPI();
+ const first=v.makeUse(),second=v.makeUse();
+ api.captureNativeActionUse(first);
+ assert.equal(api.findCurrentActionUse({item:v.weapon,action:v.nativeAction}),first);
+ api.captureNativeActionUse(second);
+ assert.equal(api.findCurrentActionUse({item:v.weapon,action:v.nativeAction}),null);
+ assert.throws(()=>api.prepareForCurrentUse({
+  item:v.weapon,action:v.nativeAction,defense:"touch"
+ }),/No unique/);
+ api.releaseNativeActionUse(second);
+ assert.equal(api.prepareForCurrentUse({
+  item:v.weapon,action:v.nativeAction,defense:"touch"
+ }),true);
+ assert.equal(api.cancelPreparedAttackOverride({actionUse:first,attackIndex:0}),true);
+ assert.equal(api.pendingPreparedOverrides(),0);
+ assert.equal(api.cancelPreparedAttackOverride({actionUse:first}),false);
+ assert.equal(api.findCurrentActionUse({item:v.weapon,action:v.nativeAction}),null);
+});
+test("early and advanced firearms, hard max range, missing PF1AE and F5 never leak overrides",async()=>{
+ globalThis.game={user:{isGM:true}};
+ for(const advanced of [false,true]){
+  const v=nativeScenario({advanced}),api=createFirearmDefenseAPI();
+  const provider=createPF1AEDefenseProvider({defense:api,gameRef:v.gameRef,
+   canvasRef:v.canvasRef,fromUuidRef:async()=>v.origin});
+  const use=v.makeUse(),ctx={actor:v.actor,item:v.weapon,action:v.nativeAction,
+   actionUse:use,attackIndex:0,attackerToken:v.origin.uuid,targetToken:v.target};
+  api.prepareAttackOverride({actionUse:use,defense:"touch"});
+  v.setDistance(advanced?61:31);
+  assert.equal((await provider.resolve(ctx)).type,"manual",
+   "override cannot bypass maximum range");
+  v.setDistance(advanced?36:12);
+  assert.equal((await provider.resolve(ctx)).type,"touch");
+  const withoutAE=createPF1AEDefenseProvider({
+   defense:api,gameRef:{modules:new Map()},canvasRef:v.canvasRef,
+   fromUuidRef:async()=>v.origin});
+  assert.equal((await withoutAE.resolve(ctx)).type,"manual");
+  const afterRefresh=createFirearmDefenseAPI();
+  assert.equal(afterRefresh.pendingPreparedOverrides(),0);
+  assert.equal(afterRefresh.resolveForAttack({weapon:v.weapon,
+   action:v.nativeAction,distance:12,distanceUnits:"m",attackIndex:0,
+   actor:v.actor,actionUse:use}).type,advanced?"touch":"normal");
+  api.clearAllPrepared();
+ }
+});
+test("owner permission, invalid indexes, no-attack action, late preparation and null attack indexes",async()=>{
+ const v=nativeScenario(),api=createFirearmDefenseAPI();
+ const use=v.makeUse();
+ globalThis.game={user:{isGM:false}};
+ assert.equal(api.prepareAttackOverride({actionUse:use,defense:"touch"}),true);
+ assert.throws(()=>api.prepareAttackOverride({actionUse:use,defense:"normal"}),/already prepared/);
+ assert.throws(()=>api.prepareAttackOverride({actionUse:use,attackIndex:-1,defense:"normal"}),/Invalid native/);
+ assert.throws(()=>api.prepareAttackOverride({actionUse:use,attackIndex:1,defense:"cmd"}),/Invalid defense/);
+ assert.equal(api.cancelPreparedAttackOverride({actionUse:use}),true);
+ const notOwner={...v.actor,testUserPermission:()=>false};
+ const otherUse={...use,actor:notOwner,item:{...v.weapon,actor:notOwner}};
+ assert.throws(()=>api.prepareAttackOverride({actionUse:otherUse,defense:"touch"}),/OWNER/);
+ use.shared.chatAttacks.push({});
+ assert.throws(()=>api.prepareAttackOverride({actionUse:use,defense:"touch"}),/before native/);
+ use.shared.chatAttacks=[];
+ api.prepareAttackOverride({actionUse:use,defense:"touch"});
+ const adapter=createPF1AEDefenseProvider({
+  defense:api,gameRef:v.gameRef,canvasRef:v.canvasRef,
+  fromUuidRef:async()=>v.origin});
+ const ctx={actor:v.actor,item:v.weapon,action:v.nativeAction,
+  actionUse:use,attackIndex:null,attackerToken:v.origin.uuid,targetToken:v.target};
+ assert.equal((await adapter.resolve(ctx)).type,"normal",
+  "unknown index cannot consume or apply a prepared override");
+ assert.equal(api.finishResolvedAttack({sourceMessageId:null,actorUuid:v.actor.uuid,
+  itemUuid:v.weapon.uuid,actionId:"fire",attackIndex:null}),true);
+ assert.equal(api.pendingPreparedOverrides(),0);
+});
+test("same weapon across two actors cannot receive another actor's temporary override",async()=>{
+ globalThis.game={user:{isGM:true}};
+ const a=nativeScenario(),b=nativeScenario(),api=createFirearmDefenseAPI();
+ b.actor.uuid="Actor.someone-else";b.weapon.actor=b.actor;
+ b.weapon.uuid="Actor.someone-else.Item.gun";
+ const useA=a.makeUse(),useB=b.makeUse();
+ api.prepareAttackOverride({actionUse:useA,defense:"touch"});
+ const provider=createPF1AEDefenseProvider({
+  defense:api,gameRef:a.gameRef,canvasRef:a.canvasRef,
+  fromUuidRef:async()=>a.origin});
+ const ctx={actor:b.actor,item:b.weapon,action:b.nativeAction,
+  actionUse:useB,attackIndex:0,attackerToken:a.origin.uuid,targetToken:a.target};
+ assert.equal((await provider.resolve(ctx)).type,"normal");
+ assert.equal(api.pendingPreparedOverrides(),1);
+ api.clearAllPrepared();
+});
