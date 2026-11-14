@@ -3,7 +3,7 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const path=require('node:path');
 const vm=require('node:vm');
-const code=fs.readFileSync(path.resolve(__dirname,'../scripts/reload-core.js'),'utf8').replace(/^import .*migration\.js.*\n/m,'');
+const code=fs.readFileSync(path.resolve(__dirname,'../scripts/reload-core.js'),'utf8').replace(/^import .*\\.js.*\\n/gm,'');
 const domHandlers=[];
 const createdMessages=[];
 const listeners=new Map(),once=new Map(),settings=new Map([
