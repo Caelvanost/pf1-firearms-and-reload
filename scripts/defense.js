@@ -6,6 +6,7 @@
 export function createFirearmDefenseAPI({namespace="pf1-firearms-and-reload",now=()=>Date.now()}={}){
  const overrides=new Map();
  const prepared=new WeakMap();
+ const completedUses=new WeakSet();
  const currentUses=new Set();
  function captureNativeActionUse(use){
   const identity=nativeIdentity(use);
@@ -42,6 +43,7 @@ export function createFirearmDefenseAPI({namespace="pf1-firearms-and-reload",now
  const activePrepared=new Set();
  const PREPARED_TTL=120000;
  let preparedDiagnostic=null;
+ let lastPreparedResolution=null;
  function nativeIdentity(use){
   if(!use||typeof use!=="object")return null;
   const action=use.action??use.shared?.action;
@@ -62,6 +64,7 @@ export function createFirearmDefenseAPI({namespace="pf1-firearms-and-reload",now
   entry.closed=true;
   activePrepared.delete(entry);
   prepared.delete(entry.use);
+  completedUses.add(entry.use);
   releaseNativeActionUse(entry.use);
   if(entry.timer)clearTimeout(entry.timer);
   entry.entries.clear();
@@ -79,6 +82,7 @@ export function createFirearmDefenseAPI({namespace="pf1-firearms-and-reload",now
   prunePrepared();
   const identity=nativeIdentity(actionUse);
   if(!identity)throw Error("A real PF1 weapon ActionUse with actor/item/action is required");
+  if(completedUses.has(actionUse))throw Error("Native ActionUse already finished or cancelled");
   if(!permitted(identity.actor))throw Error("Actor OWNER permission required");
   if(!Number.isSafeInteger(attackIndex)||attackIndex<0||attackIndex>99)
    throw Error("Invalid native attackIndex (0..99)");
@@ -154,10 +158,13 @@ export function createFirearmDefenseAPI({namespace="pf1-firearms-and-reload",now
    return dropPrepared(entry,"native attack index not verified");
   }
   const removed=entry.entries.delete(event.attackIndex);
-  if(removed)preparedDiagnostic={status:"consumed",actorUuid:entry.actorUuid,
-   itemUuid:entry.itemUuid,actionId:entry.actionId,attackIndex:event.attackIndex,
-   messageId:entry.messageId,defense:event.defense?.type??null,
-   provider:event.defense?.provider??null};
+  if(removed){
+   lastPreparedResolution={actorUuid:entry.actorUuid,itemUuid:entry.itemUuid,
+    actionId:entry.actionId,attackIndex:event.attackIndex,
+    messageId:entry.messageId,defense:event.defense?.type??null,
+    provider:event.defense?.provider??null,status:"consumed"};
+   preparedDiagnostic={...lastPreparedResolution};
+  }
   // All indices on this ActionUse may have been evaluated at this point.
   // Retain other prepared indices for later rolls in the same ActionUse.
   if(!entry.entries.size)dropPrepared(entry,"resolved");
@@ -353,6 +360,7 @@ export function createFirearmDefenseAPI({namespace="pf1-firearms-and-reload",now
   captureNativeActionUse,releaseNativeActionUse,findCurrentActionUse,
   bindActionUseMessage,finishResolvedAttack,
   lastPreparedDiagnostic:()=>preparedDiagnostic?{...preparedDiagnostic}:null,
+  lastPreparedResolution:()=>lastPreparedResolution?{...lastPreparedResolution}:null,
   pendingPreparedOverrides:()=>{prunePrepared();return [...activePrepared].reduce((n,e)=>n+e.entries.size,0)},
   clearAllPrepared:()=>{for(const e of [...activePrepared])dropPrepared(e,"shutdown");currentUses.clear()},
   setAttackOverride,cancelAttackOverride,pendingOverrides:()=>{clean();return overrides.size},
