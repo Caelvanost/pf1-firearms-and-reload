@@ -140,12 +140,19 @@ export function createFirearmDefenseAPI({namespace="pf1-firearms-and-reload",now
   // PF1AE's pf1aeAttackResolution fires AFTER all target comparisons for
   // one native roll. Unlike the provider, it is safe to clean an index here.
   prunePrepared();
-  if(!event?.sourceMessageId||!Number.isSafeInteger(event?.attackIndex))return false;
-  const matches=[...activePrepared].filter(entry=>entry.messageId===event.sourceMessageId&&
+  if(!event?.actorUuid||!event?.itemUuid||!event?.actionId)return false;
+  const matches=[...activePrepared].filter(entry=>
    entry.actorUuid===event.actorUuid&&entry.itemUuid===event.itemUuid&&
-   entry.actionId===event.actionId);
-  if(matches.length!==1)return false; // never confuse concurrent actions
+   entry.actionId===event.actionId&&
+   (event.sourceMessageId?
+    entry.messageId===event.sourceMessageId:entry.messageId===null));
+  // An ambiguous concurrent use is NEVER correlated by only actor/weapon.
+  if(matches.length!==1)return false;
   const entry=matches[0];
+  if(!Number.isSafeInteger(event.attackIndex)||event.attackIndex<0){
+   // PF1AE could not prove the roll index; discard unresolvable overrides.
+   return dropPrepared(entry,"native attack index not verified");
+  }
   const removed=entry.entries.delete(event.attackIndex);
   if(removed)preparedDiagnostic={status:"consumed",actorUuid:entry.actorUuid,
    itemUuid:entry.itemUuid,actionId:entry.actionId,attackIndex:event.attackIndex,
