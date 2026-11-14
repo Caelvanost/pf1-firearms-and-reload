@@ -1252,6 +1252,9 @@ Hooks.once('ready',async()=>{
  Hooks.on('pf1CreateActionUse',use=>{
   mod.api.defense.captureNativeActionUse(use);
  });
+ Hooks.on('pf1AttackRoll',action=>{
+  mod.api.defense.markNativeAttackRoll(action);
+ });
  Hooks.on('pf1PostActionUse',(use,message)=>{
   mod.api.defense.bindActionUseMessage(use,message);
   if(!mod.api.defense.hasPreparedForUse(use))
