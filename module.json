@@ -1,8 +1,8 @@
 {
   "id": "pf1-firearms-and-reload",
   "title": "PF1 Firearms & Reload",
-  "description": "Class-neutral per-ActionUse temporary firearm defense overrides, indexed native attacks, cancellation and PF1AE provider integration.",
-  "version": "0.4.2",
+  "description": "Use libWrapper-compatible native PF1 Item and ItemAction hooks for immediate Reload, avoiding non-libWrapper prototype conflicts.",
+  "version": "0.4.3",
   "authors": [
     {
       "name": "Caelvanost"
@@ -21,6 +21,13 @@
           "minimum": "11.11",
           "verified": "11.11"
         }
+      }
+    ],
+    "requires": [
+      {
+        "id": "lib-wrapper",
+        "type": "module",
+        "reason": "Required to intercept native PF1 use methods without non-libWrapper prototype modifications."
       }
     ]
   },
@@ -42,6 +49,6 @@
   "url": "https://github.com/Caelvanost/pf1-firearms-and-reload",
   "manifest": "https://raw.githubusercontent.com/Caelvanost/pf1-firearms-and-reload/main/module.json",
   "readme": "https://github.com/Caelvanost/pf1-firearms-and-reload/blob/main/README.md",
-  "download": "https://github.com/Caelvanost/pf1-firearms-and-reload/releases/download/v0.4.2/pf1-firearms-and-reload-v0.4.2.zip",
+  "download": "https://github.com/Caelvanost/pf1-firearms-and-reload/releases/download/v0.4.3/pf1-firearms-and-reload-v0.4.3.zip",
   "changelog": "https://github.com/Caelvanost/pf1-firearms-and-reload/blob/main/CHANGELOG.md"
 }
