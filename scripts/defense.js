@@ -18,6 +18,22 @@ export function createFirearmDefenseAPI({namespace="pf1-firearms-and-reload",now
   currentUses.add(record);
   return true;
  }
+ function markNativeAttackRoll(action){
+  const item=action?.item??action?.parent,actor=action?.actor??item?.actor;
+  const itemUuid=item?.uuid,actorUuid=actor?.uuid,actionId=action?.id;
+  if(!itemUuid||!actorUuid||!actionId)return 0;
+  let matches=0;
+  for(const record of currentUses){
+   if(record.actorUuid===actorUuid&&record.itemUuid===itemUuid&&
+      record.actionId===actionId){
+    // For same-action concurrent uses, fail closed for BOTH, never
+    // associate the roll with one arbitrary ActionUse.
+    record.rollStarted=true;
+    matches++;
+   }
+  }
+  return matches;
+ }
  function releaseNativeActionUse(use){
   for(const x of currentUses)if(x.use===use){
    currentUses.delete(x);return true;
@@ -91,7 +107,8 @@ export function createFirearmDefenseAPI({namespace="pf1-firearms-and-reload",now
   if(identity.action.hasAttack!==true||identity.action.actionType!=="rwak")
    throw Error("Action must be a ranged native weapon attack");
   // If preparation is attempted after native attacks exist, fail closed.
-  if((actionUse?.shared?.chatAttacks?.length??0)>0)
+  if((actionUse?.shared?.chatAttacks?.length??0)>0||
+      [...currentUses].some(x=>x.use===actionUse&&x.rollStarted))
    throw Error("Override must be prepared before native attack rolls");
   let entry=prepared.get(actionUse);
   if(!entry){
@@ -368,7 +385,8 @@ export function createFirearmDefenseAPI({namespace="pf1-firearms-and-reload",now
  const lastDiagnostic=()=>last?{...last}:null;
  return Object.freeze({getWeaponProfile,resolveForAttack,lastDiagnostic,
   prepareAttackOverride,cancelPreparedAttackOverride,prepareForCurrentUse,
-  captureNativeActionUse,releaseNativeActionUse,findCurrentActionUse,
+  captureNativeActionUse,markNativeAttackRoll,
+  releaseNativeActionUse,findCurrentActionUse,
   bindActionUseMessage,finishResolvedAttack,hasPreparedForUse,localizeOverride,
   lastPreparedDiagnostic:()=>preparedDiagnostic?{...preparedDiagnostic}:null,
   lastPreparedResolution:()=>lastPreparedResolution?{...lastPreparedResolution}:null,
