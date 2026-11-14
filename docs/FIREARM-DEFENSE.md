@@ -8,7 +8,7 @@ PF1AE now publishes `api.attackResolution.registerDefenseProvider({id,priority,r
 
 **Evidence safety**: Only ranged weapon attacks on recognizable firearms are affected. The attacker Token UUID must resolve unambiguously and both Tokens must belong to the active scene. Missing metadata, targets, distances, other-scene or scatter situations return `manual` for a recognized firearm (or `null` for non-firearms); no silent AC guess. Multiple targets without verified per-roll matching remain indeterminate in PF1AE itself.
 
-**Deadeye**: `api.defense.setAttackOverride` still requires a validated single-shot identity. The provider only accepts a naturally verified `sourceMessageId:attackIndex` identity from PF1AE, so a future Deadeye Script Call needs a validated pre-roll binding strategy before the override can be reliably consumed. Do not treat Deadeye as fully automated in this release.
+**Temporary external overrides (v0.4.2)**: The preferred method is `api.defense.prepareAttackOverride({actionUse,attackIndex,defense,reason})`. The native ActionUse itself is the identity: no chat message identifier is needed before the roll. The generic Usage Script Call adapter is `prepareForCurrentUse({item,action,attackIndex,defense,reason})`, which fails closed if two uses are indistinguishable. See [ACTIONUSE-DEFENSE-OVERRIDES.md](ACTIONUSE-DEFENSE-OVERRIDES.md). The legacy message-bound API remains for compatibility but is not recommended for pre-roll usage.
 
 **Testing**: Use the actual pistol with 20 ft range on a metric 1.5 m grid. At 4.5 m, PF1AE's resolved `defense.type` should be `touch`; at 12 m, it should be `normal`. Inspect:
 ```javascript
@@ -69,7 +69,7 @@ There is no dedicated UI in this experimental phase. Native metadata, when recog
 ```js
 defense.setAttackOverride({
   actorUuid:actor.uuid,itemUuid:weapon.uuid,actionId:action.id,
-  attackId:"unique-shot-0",defense:"touch",reason:"deadeye",
+  attackId:"unique-shot-0",defense:"touch",reason:"external-override",
   validated:true // caller already verified all ability conditions and Grit costs
 });
 // Use EXACT matching identity in resolveForAttack; the override is consumed once.
@@ -78,7 +78,7 @@ defense.cancelAttackOverride({
 });
 ```
 
-Overrides require exact attack IDs and caller-side validation and expire after 120 seconds. They cannot circumvent maximum range. The eventual integration must ensure this ID corresponds to the real attack before the comparison and cancels it upon abort. The engine does NOT validate Deadeye class features or spend Grit itself. For simultaneous barrels use distinct `attackId` values. The API deliberately refuses ambiguous multi-target scatter.
+Overrides require exact attack IDs and caller-side validation and expire after 120 seconds. They cannot circumvent maximum range. The eventual integration must ensure this ID corresponds to the real attack before the comparison and cancels it upon abort. The engine does NOT validate a temporary external defense exception class features or spend Grit itself. For simultaneous barrels use distinct `attackId` values. The API deliberately refuses ambiguous multi-target scatter.
 
 ## Outstanding integration work
 

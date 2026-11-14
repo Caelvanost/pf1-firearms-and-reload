@@ -37,6 +37,17 @@
       "ReloadFailed": "Échec du rechargement",
       "AmmoGuidance": "Vérifiez les objets Munition PF1 de l'inventaire, leur type et leur quantité. L'action Recharger doit utiliser « Aucune munition ».",
       "Loading": "Chargement"
+    },
+    "Defense": {
+      "Prepared": "Exception de défense préparée pour le jet {index}.",
+      "Consumed": "Exception de défense utilisée pour le jet {index}.",
+      "Cancelled": "Exception de défense annulée.",
+      "Expired": "Exception temporaire expirée.",
+      "NoCurrentUse": "Aucune utilisation d'attaque native unique n'a été trouvée.",
+      "InvalidUse": "Utilisation d'attaque native invalide ou terminée.",
+      "NoIndex": "Indice de jet non vérifié : exception non appliquée.",
+      "Permission": "Permission propriétaire requise sur le personnage.",
+      "Diagnostics": "Diagnostic d'exception de défense"
     }
   }
 }

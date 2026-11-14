@@ -107,7 +107,7 @@ const context={console,Math,Number,Map,Set,WeakMap,WeakSet,Symbol,Roll:Explosion
 };
 context.CONFIG={Item:{documentClass:NativeItemUseStub}};
 context.migrateLegacyReload=async()=>({migrated:0});
-context.createFirearmDefenseAPI=()=>({getWeaponProfile:()=>null,resolveForAttack:()=>null});
+context.createFirearmDefenseAPI=()=>({getWeaponProfile:()=>null,resolveForAttack:()=>null, captureNativeActionUse:()=>false,markNativeAttackRoll:()=>0,bindActionUseMessage:()=>false, hasPreparedForUse:()=>false,releaseNativeActionUse:()=>false,finishResolvedAttack:()=>false});
 context.createPF1AEDefenseProvider=()=>({id:'pf1-firearms-and-reload',priority:100,resolve:()=>null});
 context.globalThis=context;vm.createContext(context);vm.runInContext(code,context);
 (async()=>{

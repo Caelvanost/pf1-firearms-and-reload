@@ -5,6 +5,200 @@
  */
 export function createFirearmDefenseAPI({namespace="pf1-firearms-and-reload",now=()=>Date.now()}={}){
  const overrides=new Map();
+ const prepared=new WeakMap();
+ const completedUses=new WeakSet();
+ const currentUses=new Set();
+ function captureNativeActionUse(use){
+  prunePrepared();
+  const identity=nativeIdentity(use);
+  if(!identity)return false;
+  const existing=[...currentUses].find(x=>x.use===use);
+  if(existing)return true;
+  const record={use,...identity,createdAt:now()};
+  currentUses.add(record);
+  return true;
+ }
+ function markNativeAttackRoll(action){
+  const item=action?.item??action?.parent,actor=action?.actor??item?.actor;
+  const itemUuid=item?.uuid,actorUuid=actor?.uuid,actionId=action?.id;
+  if(!itemUuid||!actorUuid||!actionId)return 0;
+  let matches=0;
+  for(const record of currentUses){
+   if(record.actorUuid===actorUuid&&record.itemUuid===itemUuid&&
+      record.actionId===actionId){
+    // For same-action concurrent uses, fail closed for BOTH, never
+    // associate the roll with one arbitrary ActionUse.
+    record.rollStarted=true;
+    matches++;
+   }
+  }
+  return matches;
+ }
+ function releaseNativeActionUse(use){
+  for(const x of currentUses)if(x.use===use){
+   currentUses.delete(x);return true;
+  }
+  return false;
+ }
+ function findCurrentActionUse({item,action}={}){
+  prunePrepared();
+  const actor=item?.actor;
+  if(item?.type!=="weapon"||!actor?.uuid||!item?.uuid||
+     !action?.id||!permitted(actor))return null;
+  const candidates=[...currentUses].filter(x=>x.itemUuid===item.uuid&&
+   x.actorUuid===actor.uuid&&x.actionId===action.id&&
+   now()-x.createdAt<=PREPARED_TTL);
+  // Never guess the ActionUse if two same-weapon shots overlap.
+  return candidates.length===1?candidates[0].use:null;
+ }
+ function prepareForCurrentUse({item,action,attackIndex=0,defense,reason}={}){
+  const actionUse=findCurrentActionUse({item,action});
+  if(!actionUse)throw Error("No unique active native ActionUse for item and action");
+  return prepareAttackOverride({actionUse,attackIndex,defense,reason});
+ }
+
+ const activePrepared=new Set();
+ const PREPARED_TTL=120000;
+ let preparedDiagnostic=null;
+ let lastPreparedResolution=null;
+ function nativeIdentity(use){
+  if(!use||typeof use!=="object")return null;
+  const action=use.action??use.shared?.action;
+  const item=use.item??action?.item??action?.parent;
+  const actor=use.actor??item?.actor;
+  if(item?.type!=="weapon"||!item?.uuid||!actor?.uuid||!action?.id)return null;
+  if(item.actor?.uuid&&item.actor.uuid!==actor.uuid)return null;
+  if(action.item?.uuid&&action.item.uuid!==item.uuid)return null;
+  if(action.parent?.uuid&&action.parent.uuid!==item.uuid)return null;
+  return {item,actor,action,actorUuid:actor.uuid,itemUuid:item.uuid,actionId:action.id};
+ }
+ function permitted(actor){
+  if(typeof game==="undefined"||!game.user)return false;
+  return game.user.isGM===true||actor?.testUserPermission?.(game.user,"OWNER")===true;
+ }
+ function dropPrepared(entry,reason){
+  if(!entry||entry.closed)return false;
+  entry.closed=true;
+  activePrepared.delete(entry);
+  prepared.delete(entry.use);
+  completedUses.add(entry.use);
+  releaseNativeActionUse(entry.use);
+  if(entry.timer)clearTimeout(entry.timer);
+  entry.entries.clear();
+  preparedDiagnostic={status:"cleared",reason,actorUuid:entry.actorUuid,
+   itemUuid:entry.itemUuid,actionId:entry.actionId,messageId:entry.messageId??null};
+  return true;
+ }
+ function prunePrepared(){
+  const stamp=now();
+  for(const x of currentUses)if(stamp-x.createdAt>PREPARED_TTL)currentUses.delete(x);
+  for(const entry of activePrepared)
+   if(stamp-entry.createdAt>PREPARED_TTL)dropPrepared(entry,"expired");
+ }
+ function prepareAttackOverride({actionUse,attackIndex=0,defense,reason="external-script"}={}){
+  prunePrepared();
+  const identity=nativeIdentity(actionUse);
+  if(!identity)throw Error("A real PF1 weapon ActionUse with actor/item/action is required");
+  if(completedUses.has(actionUse))throw Error("Native ActionUse already finished or cancelled");
+  if(!permitted(identity.actor))throw Error("Actor OWNER permission required");
+  if(!Number.isSafeInteger(attackIndex)||attackIndex<0||attackIndex>99)
+   throw Error("Invalid native attackIndex (0..99)");
+  if(defense!=="touch"&&defense!=="normal")throw Error("Invalid defense override");
+  if(identity.action.hasAttack!==true||identity.action.actionType!=="rwak")
+   throw Error("Action must be a ranged native weapon attack");
+  // If preparation is attempted after native attacks exist, fail closed.
+  if((actionUse?.shared?.chatAttacks?.length??0)>0||
+      [...currentUses].some(x=>x.use===actionUse&&x.rollStarted))
+   throw Error("Override must be prepared before native attack rolls");
+  let entry=prepared.get(actionUse);
+  if(!entry){
+   entry={use:actionUse,...identity,entries:new Map(),createdAt:now(),
+    messageId:null,closed:false};
+   prepared.set(actionUse,entry);activePrepared.add(entry);
+   if(typeof setTimeout==="function"){
+    entry.timer=setTimeout(()=>dropPrepared(entry,"expired"),PREPARED_TTL);
+    entry.timer?.unref?.();
+   }
+  }else if(entry.closed||entry.actorUuid!==identity.actorUuid||
+    entry.itemUuid!==identity.itemUuid||entry.actionId!==identity.actionId)
+   throw Error("ActionUse identity mismatch or already completed");
+  if(entry.entries.has(attackIndex))throw Error("Override for native attack index already prepared");
+  entry.entries.set(attackIndex,{defense,reason:str(reason).slice(0,200)||"external-script"});
+  preparedDiagnostic={status:"prepared",actorUuid:entry.actorUuid,itemUuid:entry.itemUuid,
+   actionId:entry.actionId,attackIndex,defense,messageId:null};
+  return true;
+ }
+ function cancelPreparedAttackOverride({actionUse,attackIndex}={}){
+  const entry=prepared.get(actionUse);
+  if(!entry||entry.closed)return false;
+  if(attackIndex===undefined)return dropPrepared(entry,"cancelled");
+  if(!Number.isSafeInteger(attackIndex)||attackIndex<0)return false;
+  const removed=entry.entries.delete(attackIndex);
+  if(!entry.entries.size)dropPrepared(entry,"cancelled");
+  else if(removed)preparedDiagnostic={status:"cancelled",actorUuid:entry.actorUuid,
+   itemUuid:entry.itemUuid,actionId:entry.actionId,attackIndex};
+  return removed;
+ }
+ function preparedFor(context){
+  const entry=prepared.get(context?.actionUse);
+  if(!entry||entry.closed)return null;
+  const idx=context.attackIndex;
+  const actorUuid=context?.actorUuid??context?.actor?.uuid;
+  const itemUuid=context?.itemUuid??context?.weapon?.uuid??context?.item?.uuid;
+  const actionId=context?.actionId??context?.action?.id;
+  if(!Number.isSafeInteger(idx)||idx<0||actorUuid!==entry.actorUuid||
+     itemUuid!==entry.itemUuid||actionId!==entry.actionId)return null;
+  return entry.entries.get(idx)??null;
+ }
+ function hasPreparedForUse(actionUse){
+  const entry=prepared.get(actionUse);
+  return !!entry&&!entry.closed&&entry.entries.size>0;
+ }
+ function localizeOverride(key,data={}){
+  const full="PF1FR.Defense."+key;
+  if(typeof game!=="undefined"&&typeof game.i18n?.format==="function")
+   return game.i18n.format(full,data);
+  return full;
+ }
+ function bindActionUseMessage(actionUse,message){
+  const entry=prepared.get(actionUse);
+  if(!entry||entry.closed)return false;
+  const messageId=message?.id;
+  if(typeof messageId!=="string"||!messageId)return false;
+  entry.messageId=messageId;
+  return true;
+ }
+ function finishResolvedAttack(event){
+  // PF1AE's pf1aeAttackResolution fires AFTER all target comparisons for
+  // one native roll. Unlike the provider, it is safe to clean an index here.
+  prunePrepared();
+  if(!event?.actorUuid||!event?.itemUuid||!event?.actionId)return false;
+  const matches=[...activePrepared].filter(entry=>
+   entry.actorUuid===event.actorUuid&&entry.itemUuid===event.itemUuid&&
+   entry.actionId===event.actionId&&
+   (event.sourceMessageId?
+    entry.messageId===event.sourceMessageId:entry.messageId===null));
+  // An ambiguous concurrent use is NEVER correlated by only actor/weapon.
+  if(matches.length!==1)return false;
+  const entry=matches[0];
+  if(!Number.isSafeInteger(event.attackIndex)||event.attackIndex<0){
+   // PF1AE could not prove the roll index; discard unresolvable overrides.
+   return dropPrepared(entry,"native attack index not verified");
+  }
+  const removed=entry.entries.delete(event.attackIndex);
+  if(removed){
+   lastPreparedResolution={actorUuid:entry.actorUuid,itemUuid:entry.itemUuid,
+    actionId:entry.actionId,attackIndex:event.attackIndex,
+    messageId:entry.messageId,defense:event.defense?.type??null,
+    provider:event.defense?.provider??null,status:"consumed"};
+   preparedDiagnostic={...lastPreparedResolution};
+  }
+  // All indices on this ActionUse may have been evaluated at this point.
+  // Retain other prepared indices for later rolls in the same ActionUse.
+  if(!entry.entries.size)dropPrepared(entry,"resolved");
+  return removed;
+ }
+
  const MAX_OVERRIDE_AGE=120000;
  let last=null;
  const integer=n=>Number.isSafeInteger(n)&&n>=1&&n<=100;
@@ -131,7 +325,7 @@ export function createFirearmDefenseAPI({namespace="pf1-firearms-and-reload",now
    throw Error("Invalid defense override");
   if(context.validated!==true)throw Error("Override requires validated=true after ability costs and conditions");
   if(overrides.has(key))throw Error("Attack override already registered");
-  overrides.set(key,{defense:context.defense,reason:str(context.reason)||"special-ability",
+  overrides.set(key,{defense:context.defense,reason:str(context.reason)||"external-script",
    createdAt:now()});
   return true;
  }
@@ -175,18 +369,29 @@ export function createFirearmDefenseAPI({namespace="pf1-firearms-and-reload",now
    last={...partial,status:"out-of-range",type:null,reason:"beyond-maximum-range"};
    return {...last};
   }
+  const preparedSpecial=preparedFor(context);
   const key=identity(context);
-  const special=key?overrides.get(key):null;
-  if(special&&context?.consumeOverride!==false)overrides.delete(key);
+  const legacySpecial=key?overrides.get(key):null;
+  if(legacySpecial&&context?.consumeOverride!==false)overrides.delete(key);
+  const special=preparedSpecial??legacySpecial;
   const type=special?.defense??(increment<=profile.contactIncrements?"touch":"normal");
   const reason=special?.reason??(profile.category==="early"?
    (type==="touch"?"early-firearm-first-increment":"early-firearm-beyond-first-increment"):
    (type==="touch"?"advanced-firearm-first-five-increments":"advanced-firearm-beyond-fifth-increment"));
-  last={...partial,type,reason,overrideApplied:!!special};
+  last={...partial,type,reason,overrideApplied:!!special,
+   overrideSource:preparedSpecial?"actionUse":legacySpecial?"legacy-id":null};
   return {...last};
  }
  const lastDiagnostic=()=>last?{...last}:null;
  return Object.freeze({getWeaponProfile,resolveForAttack,lastDiagnostic,
+  prepareAttackOverride,cancelPreparedAttackOverride,prepareForCurrentUse,
+  captureNativeActionUse,markNativeAttackRoll,
+  releaseNativeActionUse,findCurrentActionUse,
+  bindActionUseMessage,finishResolvedAttack,hasPreparedForUse,localizeOverride,
+  lastPreparedDiagnostic:()=>preparedDiagnostic?{...preparedDiagnostic}:null,
+  lastPreparedResolution:()=>lastPreparedResolution?{...lastPreparedResolution}:null,
+  pendingPreparedOverrides:()=>{prunePrepared();return [...activePrepared].reduce((n,e)=>n+e.entries.size,0)},
+  clearAllPrepared:()=>{for(const e of [...activePrepared])dropPrepared(e,"shutdown");currentUses.clear()},
   setAttackOverride,cancelAttackOverride,pendingOverrides:()=>{clean();return overrides.size},
   integrationStatus:()=>({available:typeof game!=="undefined"&&
    !!game.modules?.get?.("pf1-automation-engine")?.api?.attackResolution?.registerDefenseProvider,
@@ -259,11 +464,11 @@ export function createPF1AEDefenseProvider({defense,gameRef,canvasRef,fromUuidRe
    if(typeof measured!=="number"||!Number.isFinite(measured)||measured<0)
     return {type:"manual",reason:"PF1FR: PF1AE range unit conversion unavailable"};
    const result=defense.resolveForAttack({
-    actor:context.actor,weapon,action,
+    actor:context.actor,weapon,action,actionUse:context.actionUse,
     actorUuid:context.actor?.uuid,itemUuid:weapon.uuid,
     actionId:action.id,attackIndex:context.attackIndex,
-    // Attack IDs cannot be guessed: use the real message + native index,
-    // only when BOTH are supplied. Prevents a Deadeye override leak.
+    // Legacy message-bound IDs remain optional; ActionUse overrides do not
+    // need an ID before PF1 creates a chat message.
     attackId:context.sourceMessageId&&Number.isSafeInteger(context.attackIndex)
      ?context.sourceMessageId+":"+context.attackIndex:null,
     distance:measured,distanceUnits:destination,sceneUnits:sceneUnit,

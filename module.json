@@ -1,8 +1,8 @@
 {
   "id": "pf1-firearms-and-reload",
   "title": "PF1 Firearms & Reload",
-  "description": "Dynamic firearm touch/normal AC provider registered in PF1AE v1.25.0; shares native range measurement and conversions.",
-  "version": "0.4.1",
+  "description": "Class-neutral per-ActionUse temporary firearm defense overrides, indexed native attacks, cancellation and PF1AE provider integration.",
+  "version": "0.4.2",
   "authors": [
     {
       "name": "Caelvanost"
@@ -42,6 +42,6 @@
   "url": "https://github.com/Caelvanost/pf1-firearms-and-reload",
   "manifest": "https://raw.githubusercontent.com/Caelvanost/pf1-firearms-and-reload/main/module.json",
   "readme": "https://github.com/Caelvanost/pf1-firearms-and-reload/blob/main/README.md",
-  "download": "https://github.com/Caelvanost/pf1-firearms-and-reload/releases/download/v0.4.1/pf1-firearms-and-reload-v0.4.1.zip",
+  "download": "https://github.com/Caelvanost/pf1-firearms-and-reload/releases/download/v0.4.2/pf1-firearms-and-reload-v0.4.2.zip",
   "changelog": "https://github.com/Caelvanost/pf1-firearms-and-reload/blob/main/CHANGELOG.md"
 }
