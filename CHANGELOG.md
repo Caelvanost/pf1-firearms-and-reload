@@ -1,3 +1,14 @@
+## 0.4.2 — Generic native ActionUse defense overrides (experimental)
+
+- New **class-neutral** API `api.defense.prepareAttackOverride({actionUse,attackIndex,defense,reason})` for a precise native PF1 ActionUse and zero-based attack index. Supports `touch` or `normal`; never changes persistent `action.touch` or weapon flags.
+- `prepareForCurrentUse({item,action,...})` and `findCurrentActionUse({item,action})` offer a fail-closed bridge for PF1 native **Utilisation** Script Calls where ActionUse is not an exposed local. Multiple simultaneous matches refuse to guess.
+- Native `pf1CreateActionUse` tracks the actual use. The PF1AE defense provider reads the same instance on resolution, then `pf1aeAttackResolution` consumes the override **after** the target comparison(s) for its attack index. `pf1PostActionUse` links the generated card ID when available.
+- `cancelPreparedAttackOverride` cancels one index or an entire ActionUse. Completed/aborted uses cannot be reused; unresolved records expire after 120 seconds and disappear on F5. Local-only, owner-aware state avoids applying exceptions to a different player's weapon or use.
+- New `lastPreparedDiagnostic()`, `lastPreparedResolution()`, `pendingPreparedOverrides()`, and French/English diagnostic translations.
+- Rule-safety: maximum firearm range remains enforced; no automatic use on missing native attack indices, unknown roll pairing, or unsupported scatter attacks. Native PF1 Contact checkbox keeps its documented precedence in PF1AE 1.25.1.
+- No character class, talent, feat, resource cost, attack roll, damage, ammunition, reload, long feu or explosion code added or changed.
+- Extensive regression suite for per-index isolation, multiple target comparisons, double barrels, cancellation, cross-actor privacy, range, missing PF1AE and F5 semantics. See `docs/ACTIONUSE-DEFENSE-OVERRIDES.md`.
+
 ## 0.4.1 — Live PF1AE firearm touch AC selection (experimental)
 
 - Register a true `attackResolution.registerDefenseProvider` with PF1AE **v1.25.0** (priority 100) when available; keep PF1FR functional without that module.
