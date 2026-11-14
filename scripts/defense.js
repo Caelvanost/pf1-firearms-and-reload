@@ -6,6 +6,39 @@
 export function createFirearmDefenseAPI({namespace="pf1-firearms-and-reload",now=()=>Date.now()}={}){
  const overrides=new Map();
  const prepared=new WeakMap();
+ const currentUses=new Set();
+ function captureNativeActionUse(use){
+  const identity=nativeIdentity(use);
+  if(!identity)return false;
+  const existing=[...currentUses].find(x=>x.use===use);
+  if(existing)return true;
+  const record={use,...identity,createdAt:now()};
+  currentUses.add(record);
+  return true;
+ }
+ function releaseNativeActionUse(use){
+  for(const x of currentUses)if(x.use===use){
+   currentUses.delete(x);return true;
+  }
+  return false;
+ }
+ function findCurrentActionUse({item,action}={}){
+  prunePrepared();
+  const actor=item?.actor;
+  if(item?.type!=="weapon"||!actor?.uuid||!item?.uuid||
+     !action?.id||!permitted(actor))return null;
+  const candidates=[...currentUses].filter(x=>x.itemUuid===item.uuid&&
+   x.actorUuid===actor.uuid&&x.actionId===action.id&&
+   now()-x.createdAt<=PREPARED_TTL);
+  // Never guess the ActionUse if two same-weapon shots overlap.
+  return candidates.length===1?candidates[0].use:null;
+ }
+ function prepareForCurrentUse({item,action,attackIndex=0,defense,reason}={}){
+  const actionUse=findCurrentActionUse({item,action});
+  if(!actionUse)throw Error("No unique active native ActionUse for item and action");
+  return prepareAttackOverride({actionUse,attackIndex,defense,reason});
+ }
+
  const activePrepared=new Set();
  const PREPARED_TTL=120000;
  let preparedDiagnostic=null;
@@ -29,6 +62,7 @@ export function createFirearmDefenseAPI({namespace="pf1-firearms-and-reload",now
   entry.closed=true;
   activePrepared.delete(entry);
   prepared.delete(entry.use);
+  releaseNativeActionUse(entry.use);
   if(entry.timer)clearTimeout(entry.timer);
   entry.entries.clear();
   preparedDiagnostic={status:"cleared",reason,actorUuid:entry.actorUuid,
@@ -37,6 +71,7 @@ export function createFirearmDefenseAPI({namespace="pf1-firearms-and-reload",now
  }
  function prunePrepared(){
   const stamp=now();
+  for(const x of currentUses)if(stamp-x.createdAt>PREPARED_TTL)currentUses.delete(x);
   for(const entry of activePrepared)
    if(stamp-entry.createdAt>PREPARED_TTL)dropPrepared(entry,"expired");
  }
@@ -307,11 +342,12 @@ export function createFirearmDefenseAPI({namespace="pf1-firearms-and-reload",now
  }
  const lastDiagnostic=()=>last?{...last}:null;
  return Object.freeze({getWeaponProfile,resolveForAttack,lastDiagnostic,
-  prepareAttackOverride,cancelPreparedAttackOverride,
+  prepareAttackOverride,cancelPreparedAttackOverride,prepareForCurrentUse,
+  captureNativeActionUse,releaseNativeActionUse,findCurrentActionUse,
   bindActionUseMessage,finishResolvedAttack,
   lastPreparedDiagnostic:()=>preparedDiagnostic?{...preparedDiagnostic}:null,
   pendingPreparedOverrides:()=>{prunePrepared();return [...activePrepared].reduce((n,e)=>n+e.entries.size,0)},
-  clearAllPrepared:()=>{for(const e of [...activePrepared])dropPrepared(e,"shutdown")},
+  clearAllPrepared:()=>{for(const e of [...activePrepared])dropPrepared(e,"shutdown");currentUses.clear()},
   setAttackOverride,cancelAttackOverride,pendingOverrides:()=>{clean();return overrides.size},
   integrationStatus:()=>({available:typeof game!=="undefined"&&
    !!game.modules?.get?.("pf1-automation-engine")?.api?.attackResolution?.registerDefenseProvider,
