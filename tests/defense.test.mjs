@@ -63,11 +63,11 @@ test("indeterminate distances/units and scatter never silently pick defense",()=
  ])assert.equal(api.resolveForAttack(ctx).status,"unresolved");
  assert.equal(api.resolveForAttack(context(gun,5)).type,"touch");
 });
-test("single-use validated Deadeye override cannot cross a shot and cannot defeat max range",()=>{
+test("single-use validated external override cannot cross a shot and cannot defeat max range",()=>{
  let clock=1000;const api=createFirearmDefenseAPI({now:()=>clock});
  const gun=firearm();
  const shot=context(gun,12,"m",{actionId:"a1",attackId:"shot-A"});
- assert.throws(()=>api.setAttackOverride({...shot,defense:"touch",reason:"deadeye"}),/validated/);
+ assert.throws(()=>api.setAttackOverride({...shot,defense:"touch",reason:"external-script"}),/validated/);
  assert.equal(api.resolveForAttack(shot).type,"normal");
  api.setAttackOverride({...shot,defense:"touch",reason:"deadeye",validated:true});
  const other={...shot,attackId:"shot-B"};
@@ -84,7 +84,7 @@ test("single-use validated Deadeye override cannot cross a shot and cannot defea
  clock+=120001;assert.equal(api.pendingOverrides(),0);
  assert.equal(api.resolveForAttack(shot).type,"normal");
 });
-test("double barrel attack indices are independent and second shot has no Deadeye leakage",()=>{
+test("double barrel attack indices are independent and second shot has no external override leakage",()=>{
  const api=createFirearmDefenseAPI(),gun=firearm();
  const first=context(gun,12,"m",{attackId:"double-0",attackIndex:0,actionId:"a1"});
  const second=context(gun,12,"m",{attackId:"double-1",attackIndex:1,actionId:"a1"});
@@ -307,6 +307,18 @@ test("owner permission, invalid indexes, no-attack action, late preparation and 
   "unknown index cannot consume or apply a prepared override");
  assert.equal(api.finishResolvedAttack({sourceMessageId:null,actorUuid:v.actor.uuid,
   itemUuid:v.weapon.uuid,actionId:"fire",attackIndex:null}),true);
+ assert.equal(api.pendingPreparedOverrides(),0);
+});
+test("the actual native attack roll marks its ActionUse as too late for new overrides",()=>{
+ globalThis.game={user:{isGM:true}};
+ const v=nativeScenario(),api=createFirearmDefenseAPI();
+ const use=v.makeUse();
+ api.captureNativeActionUse(use);
+ api.prepareAttackOverride({actionUse:use,attackIndex:0,defense:"touch"});
+ assert.equal(api.markNativeAttackRoll(v.nativeAction),1);
+ assert.throws(()=>api.prepareAttackOverride({actionUse:use,attackIndex:1,defense:"touch"}),
+  /before native/);
+ api.cancelPreparedAttackOverride({actionUse:use});
  assert.equal(api.pendingPreparedOverrides(),0);
 });
 test("same weapon across two actors cannot receive another actor's temporary override",async()=>{
