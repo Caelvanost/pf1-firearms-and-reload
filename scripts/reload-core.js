@@ -1,4 +1,4 @@
-import { createFirearmDefenseAPI } from "./defense.js";
+import { createFirearmDefenseAPI, createPF1AEDefenseProvider } from "./defense.js";
 import { migrateLegacyReload } from "./migration.js";
 /**
  * PF1AE reload core, Foundry 13 / PF1 11.11.
@@ -1218,6 +1218,27 @@ function rlInstall(){
   }
  });;
 }
+let RL_DEFENSE_UNREGISTER=null;
+function rlInstallDefenseProvider(){
+ if(RL_DEFENSE_UNREGISTER||!rlAllowed())return;
+ const ae=game.modules.get('pf1-automation-engine');
+ const api=ae?.active?ae.api?.attackResolution:null;
+ if(typeof api?.registerDefenseProvider!=='function')return;
+ const mine=game.modules.get(RL_NS)?.api?.defense;
+ if(!mine)return;
+ try{
+  const provider=createPF1AEDefenseProvider({
+   defense:mine,gameRef:game,canvasRef:globalThis.canvas,
+   fromUuidRef:globalThis.fromUuid
+  });
+  // No monkey-patching ItemAction.touch. PF1AE's explicit action
+  // override still has highest priority, followed by this provider.
+  RL_DEFENSE_UNREGISTER=api.registerDefenseProvider(provider);
+  console.info('[PF1FR][Defense] Registered PF1AE native range provider',provider.id);
+ }catch(error){
+  console.warn('[PF1FR][Defense] Provider registration failed safely',error);
+ }
+}
 Hooks.once('ready',async()=>{
  if(game.user?.isGM) await migrateLegacyReload();
  const mod=game.modules.get(RL_NS);
@@ -1226,6 +1247,10 @@ Hooks.once('ready',async()=>{
  // Standalone rule selection: not registered with PF1AE until its public
  // attackResolution contract is released and verified.
  mod.api.defense=createFirearmDefenseAPI();
+ // Defer until all modules have run their own ready hook; PF1AE's
+ // attackResolution API is also installed on ready.
+ void Promise.resolve().then(rlInstallDefenseProvider);
+ Hooks.on('canvasReady',rlInstallDefenseProvider);
  mod.api.reload=Object.freeze({
   getState:weapon=>rlState(weapon),
   canFire:(weapon,action,attacks=1)=>{
