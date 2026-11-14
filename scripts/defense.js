@@ -249,7 +249,15 @@ export function createPF1AEDefenseProvider({defense,gameRef,canvasRef,fromUuidRe
    const raw=rangeApi.measure(origin,target,grid);
    if(typeof raw!=="number"||!Number.isFinite(raw)||raw<0)return {
     type:"manual",reason:"PF1FR: occupied-cell distance unavailable"};
-   const sceneUnit=scene.grid?.units;
+   const unit=String(scene.grid?.units??"").toLowerCase();
+   const sceneUnit=["m","meter","meters","metre","metres","mètre","mètres"]
+    .includes(unit)?"m":["ft","feet","foot","pied","pieds"]
+    .includes(unit)?"ft":null;
+   const destination=profile.range.unit==="scene"?sceneUnit:profile.range.unit;
+   const measured=sceneUnit&&destination?
+    rangeApi.convert(raw,sceneUnit,destination):null;
+   if(typeof measured!=="number"||!Number.isFinite(measured)||measured<0)
+    return {type:"manual",reason:"PF1FR: PF1AE range unit conversion unavailable"};
    const result=defense.resolveForAttack({
     actor:context.actor,weapon,action,
     actorUuid:context.actor?.uuid,itemUuid:weapon.uuid,
@@ -258,7 +266,7 @@ export function createPF1AEDefenseProvider({defense,gameRef,canvasRef,fromUuidRe
     // only when BOTH are supplied. Prevents a Deadeye override leak.
     attackId:context.sourceMessageId&&Number.isSafeInteger(context.attackIndex)
      ?context.sourceMessageId+":"+context.attackIndex:null,
-    distance:raw,distanceUnits:sceneUnit,sceneUnits:sceneUnit,
+    distance:measured,distanceUnits:destination,sceneUnits:sceneUnit,
     scatter:action.scatter===true
    });
    if(!result||result.status==="not-firearm")return null;
