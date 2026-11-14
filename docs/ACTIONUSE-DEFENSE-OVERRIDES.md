@@ -69,7 +69,7 @@ If a different Item invokes the script, pass the **actual attacking weapon Item*
 
 Scripts can inspect the currently tracked use with `api.findCurrentActionUse({item,action})` or explicitly call `api.cancelPreparedAttackOverride({actionUse})` if an operation is interrupted.
 
-**Ordering**: `pf1CreateActionUse` is the native pre-attack creation hook. A Script Call must run after this hook and **before** the native attack rolls. The API rejects preparation when the use already contains native chat attacks. If a specific Script Call phase runs after the attack dice on a PF1 build, move the call to a pre-roll phase. No guarantee is claimed for contexts that do not expose or identify the correct native ActionUse.
+**Ordering**: `pf1CreateActionUse` is the native pre-attack creation hook. A Script Call must run after this hook and **before** the native attack rolls. The API observes `pf1AttackRoll` and rejects any new preparation after the actual native attack roll begins; it also rejects preparation when the use already contains native chat attacks. If a specific Script Call phase runs after the attack dice on a PF1 build, move the call to a pre-roll phase. No guarantee is claimed for contexts that do not expose or identify the correct native ActionUse.
 
 ## Native PF1AE integration
 
