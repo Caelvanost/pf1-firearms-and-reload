@@ -1027,7 +1027,20 @@ function rlInstallSelectorReload(){
  document.addEventListener('click',handler,true);
  return true;
 }
+const RL_USE_WRAPPER_PROTOTYPES=new WeakSet();
+/**
+ * PF1 11.11 native ItemPF/ItemAction.use integration.
+ * libWrapper owns the method chain: no direct prototype reassignment.
+ * The ItemAction wrapper is MIXED because Reload intentionally routes to
+ * ItemPF.use({actionId, skipDialog:true}); other actions use wrapped().
+ */
 function rlInstallInstantUse(){
+ const library=globalThis.libWrapper;
+ if(typeof library?.register!=='function'){
+  console.warn('[PF1FR][Reload] libWrapper is required for native use interception; '+
+   'no prototype methods were modified. ActionSelector click fallback remains.');
+  return false;
+ }
  const ensureSkip=(item,action,options)=>{
   if(!rlAllowed()||!options||typeof options!=='object'||options.skipDialog===true)
    return options;
@@ -1036,71 +1049,72 @@ function rlInstallInstantUse(){
   return request.candidate&&request.weapon
    ?{...options,skipDialog:true}:options;
  };
+ const resolveOwner=cls=>{
+  let proto=cls?.prototype;
+  while(proto&&!Object.prototype.hasOwnProperty.call(proto,'use'))
+   proto=Object.getPrototypeOf(proto);
+  return typeof proto?.use==='function'?proto:null;
+ };
  let installed=0;
- // PF1 11.11: the actual character-sheet action belongs to
- // pf1.components.ItemAction (module/components/action.mjs).
- // The earlier wrapper targeted the newer pf1.models.components.Action,
- // leaving the real Reload button untouched. Patch both variants.
- const actionClasses=new Set([
-  globalThis.pf1?.components?.ItemAction,
-  globalThis.pf1?.components?.Action,
-  globalThis.pf1?.models?.components?.Action
- ]);
- for(const cls of actionClasses){
-  let proto=cls?.prototype;
-  while(proto && !Object.prototype.hasOwnProperty.call(proto,'use'))
-   proto=Object.getPrototypeOf(proto);
-  if(!proto||typeof proto.use!=='function')continue;
-  const original=proto.use;
-  if(original.pf1frInstantReloadWrapped){installed++;continue;}
-  const wrapped=function(options={}){
-   // The PF1 v11.11 ItemAction is a pseudo-document owned by this.parent.
-   // Route Reload *directly* through the native ItemPF.use entry point
-   // demonstrated to work in-world (actionId + skipDialog). This also
-   // avoids implicit action selection and the Action.use popup pathway.
-   const weapon=this.parent?.type==='weapon'
-    ?this.parent:(this.item?.type==='weapon'?this.item:null);
-   if(rlAllowed()&&weapon&&rlReloadName(this.name)&&this.hasAttack!==true&&
-      typeof weapon.use==='function'){
-    const supplied=options&&typeof options==='object'?options:{};
-    return weapon.use({...supplied,actionId:this.id,skipDialog:true});
-   }
-   const item=this.parent??this.item;
-   return original.call(this,ensureSkip(item,this,options));
-  };
-  wrapped.pf1frInstantReloadWrapped=true;
-  proto.use=wrapped;
-  installed++;
- }
- // Also cover direct item.use() calls. PF1 subclasses may override the
- // base implementation, so locate the concrete document class in addition
- // to the inherited owner of use().
- const itemClasses=new Set([
-  globalThis.CONFIG?.Item?.documentClass,
-  globalThis.pf1?.documents?.item?.ItemPF,
-  globalThis.pf1?.documents?.ItemPF
- ]);
- for(const cls of itemClasses){
-  let proto=cls?.prototype;
-  while(proto && !Object.prototype.hasOwnProperty.call(proto,'use'))
-   proto=Object.getPrototypeOf(proto);
-  if(!proto||typeof proto.use!=='function')continue;
-  const original=proto.use;
-  if(original.pf1frInstantReloadWrapped){installed++;continue;}
-  const wrapped=function(options={}){
+ const register=(path,cls,fn,type)=>{
+  const owner=resolveOwner(cls);
+  if(!owner||RL_USE_WRAPPER_PROTOTYPES.has(owner))return false;
+  try{
+   library.register(RL_NS,path,fn,type);
+   RL_USE_WRAPPER_PROTOTYPES.add(owner);
+   installed++;
+   return true;
+  }catch(error){
+   console.warn('[PF1FR][Reload] libWrapper registration failed for '+path,
+    error);
+   return false;
+  }
+ };
+ const actionWrapper=function(wrapped,...args){
+  const options=args[0];
+  const weapon=this.parent?.type==='weapon'?this.parent:
+   (this.item?.type==='weapon'?this.item:null);
+  if(rlAllowed()&&weapon&&rlReloadName(this.name)&&this.hasAttack!==true&&
+     typeof weapon.use==='function'){
+   const supplied=options&&typeof options==='object'?options:{};
+   return weapon.use({...supplied,actionId:this.id,skipDialog:true});
+  }
+  const item=this.parent??this.item;
+  if(args.length&&options&&typeof options==='object')
+   args[0]=ensureSkip(item,this,options);
+  return wrapped(...args);
+ };
+ const itemWrapper=function(wrapped,...args){
+  const options=args[0];
+  if(args.length&&options&&typeof options==='object'){
    const actions=rlActions(this);
-   const action=options?.actionId!=null?
+   const action=options.actionId!=null?
     actions.find(a=>a?.id===options.actionId):actions[0];
-   return original.call(this,ensureSkip(this,action,options));
-  };
-  wrapped.pf1frInstantReloadWrapped=true;
-  proto.use=wrapped;
-  installed++;
- }
+   args[0]=ensureSkip(this,action,options);
+  }
+  return wrapped(...args);
+ };
+ // First try the actual PF1 v11.11 Action owner, then aliases.
+ // Register only once per underlying method owner to avoid duplicate
+ // libWrapper chains even when several globals expose the same class.
+ const actionCandidates=[
+  ['pf1.components.ItemAction.prototype.use',globalThis.pf1?.components?.ItemAction],
+  ['pf1.components.Action.prototype.use',globalThis.pf1?.components?.Action],
+  ['pf1.models.components.Action.prototype.use',globalThis.pf1?.models?.components?.Action]
+ ];
+ for(const [path,cls] of actionCandidates)
+  register(path,cls,actionWrapper,'MIXED');
+ const itemCandidates=[
+  ['pf1.documents.item.ItemPF.prototype.use',globalThis.pf1?.documents?.item?.ItemPF],
+  ['pf1.documents.ItemPF.prototype.use',globalThis.pf1?.documents?.ItemPF],
+  ['CONFIG.Item.documentClass.prototype.use',globalThis.CONFIG?.Item?.documentClass]
+ ];
+ for(const [path,cls] of itemCandidates)
+  register(path,cls,itemWrapper,'WRAPPER');
  if(!installed)
-  console.warn('[PF1FR][Reload] Neither PF1 Action.use nor Item.use could be wrapped; native dialogs remain.');
+  console.warn('[PF1FR][Reload] No native use methods could be registered through libWrapper.');
  else
-  console.info('[PF1FR][Reload] Instant native Reload active:',installed,'entry points.');
+  console.info('[PF1FR][Reload] Registered native use wrappers with libWrapper:',installed);
  return installed>0;
 }
 function rlInstall(){
