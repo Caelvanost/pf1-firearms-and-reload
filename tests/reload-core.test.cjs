@@ -108,6 +108,7 @@ const context={console,Math,Number,Map,Set,WeakMap,WeakSet,Symbol,Roll:Explosion
 context.CONFIG={Item:{documentClass:NativeItemUseStub}};
 context.migrateLegacyReload=async()=>({migrated:0});
 context.createFirearmDefenseAPI=()=>({getWeaponProfile:()=>null,resolveForAttack:()=>null});
+context.createPF1AEDefenseProvider=()=>({id:'pf1-firearms-and-reload',priority:100,resolve:()=>null});
 context.globalThis=context;vm.createContext(context);vm.runInContext(code,context);
 (async()=>{
  for(const fn of once.get('init')??[])fn();
