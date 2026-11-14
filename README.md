@@ -136,3 +136,7 @@ Once a primitive firearm explodes, the module immediately rolls its native PF1 a
 ## v0.3.5 — Explosion hit points
 
 When a nonmagical primitive firearm explodes, its native PF1 Item current HP are set to 0; if its durability model exposes an HP offset, that offset is adjusted to keep the derived current HP at zero. Maximum HP remain unchanged, and the Item is retained instead of being deleted. An enchanted/magical firearm retains its HP while becoming unusable under the prior `exploded` flag. Damage to the carrier is still handled independently through the explosion chat card. This version does not retroactively modify guns that already exploded before the update.
+
+## v0.4.0 — Experimental standalone firearm target-defense API
+
+Primitive firearms use touch AC in their first range increment, advanced firearms in their first five, with maximum ranges of five and ten increments respectively. `game.modules.get('pf1-firearms-and-reload').api.defense` now exposes `getWeaponProfile`, `resolveForAttack`, `setAttackOverride`, `cancelAttackOverride` and diagnostics. **This does not yet modify native attack resolution**: the required PF1AE `attackResolution` provider API is not present in PF1AE v1.24.6. The standalone API requires a reliable external target distance, and unknown distance or units fail closed. See [docs/FIREARM-DEFENSE.md](docs/FIREARM-DEFENSE.md). Existing reload and misfire features are unchanged.
