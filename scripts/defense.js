@@ -210,6 +210,17 @@ export function createPF1AEDefenseProvider({defense,gameRef,canvasRef,fromUuidRe
       action.actionType!=="rwak")return null;
    const profile=defense.getWeaponProfile(weapon,action);
    if(profile.status==="not-firearm")return null;
+   // Unknown ranged weapons (bows, slings, custom throwing weapons) must
+   // remain entirely outside PF1FR. Only an identifiable firearm can
+   // request a manual ruling because its firearm-specific data are missing.
+   if(profile.status==="unknown"&&!profile.category){
+    const nativeType=String(weapon.system?.weaponType??"").toLowerCase();
+    const recognized=/(?:pistol|pistolet|musket|mousquet|blunderbuss|tromblon|arquebus|revolver|rifle|shotgun)/i
+     .test(String(weapon.name??""));
+    const explicit=weapon.getFlag?.("pf1-firearms-and-reload","firearmCategory");
+    if(nativeType!=="firearm"&&nativeType!=="gun"&&!recognized&&!explicit)
+     return null;
+   }
    if(profile.status!=="ok")return {
     type:"manual",reason:"PF1FR: "+(profile.reason??"unknown firearm profile")};
    const module=gameRef?.modules?.get?.("pf1-automation-engine");
