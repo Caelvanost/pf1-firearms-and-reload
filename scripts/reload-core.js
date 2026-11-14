@@ -1247,6 +1247,19 @@ Hooks.once('ready',async()=>{
  // Standalone rule selection: not registered with PF1AE until its public
  // attackResolution contract is released and verified.
  mod.api.defense=createFirearmDefenseAPI();
+ // Collect the actual PF1 ActionUse reference before its native dice rolls.
+ // PF1AE's resolver receives this same reference after the roll.
+ Hooks.on('pf1CreateActionUse',use=>{
+  mod.api.defense.captureNativeActionUse(use);
+ });
+ Hooks.on('pf1PostActionUse',(use,message)=>{
+  mod.api.defense.bindActionUseMessage(use,message);
+ });
+ // PF1AE emits this only after all target comparisons for the roll.
+ Hooks.on('pf1aeAttackResolution',event=>{
+  mod.api.defense.finishResolvedAttack(event);
+ });
+
  // Defer until all modules have run their own ready hook; PF1AE's
  // attackResolution API is also installed on ready.
  void Promise.resolve().then(rlInstallDefenseProvider);
