@@ -1,8 +1,8 @@
 {
   "id": "pf1-firearms-and-reload",
   "title": "PF1 Firearms & Reload",
-  "description": "Public external ammo consumption API for native PF1 Script Calls: read-only preflight, one-shot chamber/inventory debit, idempotency, cancellation and reconciliation diagnostics.",
-  "version": "0.5.0",
+  "description": "Pathfinder 1e firearm and crossbow automation: chamber-based reloading, native and Script Call ammunition consumption, misfires, broken weapons and explosions, range-based touch AC targeting, and temporary per-attack defense overrides.",
+  "version": "0.5.1",
   "authors": [
     {
       "name": "Caelvanost"
@@ -49,6 +49,6 @@
   "url": "https://github.com/Caelvanost/pf1-firearms-and-reload",
   "manifest": "https://raw.githubusercontent.com/Caelvanost/pf1-firearms-and-reload/main/module.json",
   "readme": "https://github.com/Caelvanost/pf1-firearms-and-reload/blob/main/README.md",
-  "download": "https://github.com/Caelvanost/pf1-firearms-and-reload/releases/download/v0.5.0/pf1-firearms-and-reload-v0.5.0.zip",
+  "download": "https://github.com/Caelvanost/pf1-firearms-and-reload/releases/download/v0.5.1/pf1-firearms-and-reload-v0.5.1.zip",
   "changelog": "https://github.com/Caelvanost/pf1-firearms-and-reload/blob/main/CHANGELOG.md"
 }

@@ -1,3 +1,8 @@
+## 0.5.1 — Updated Foundry module summary
+
+- Expanded the short `module.json` description to cover all major features: chamber-based reloading, native and external ammunition consumption, misfires, explosions, range-based touch AC, and per-attack defense overrides.
+- Documentation/manifest-only release. No behavioral changes to automation code.
+
 ## 0.5.0 — External ammo consumption API (experimental)
 
 - Public `api.reload.canConsumeAmmo(weapon,{count})` is synchronous and read-only: returns structured `ok/reason/loaded/capacity/needed` including missing inventory, destroyed weapons, permissions, uninitialized loading and busy state.
