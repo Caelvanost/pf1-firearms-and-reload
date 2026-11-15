@@ -247,6 +247,45 @@ context.globalThis=context;vm.createContext(context);vm.runInContext(code,contex
  assert.equal(extAmmo.system.quantity,5);
  assert.equal(extGun.flags.reloadState.slots.length,0);
  extAmmo.system.abundant=false;
+ // A native PF1 shot following an external action spends inventory once
+ // and discards only its own chamber, not those previously consumed.
+ await api.reload(extGun,{count:2,ammoId:extAmmo.id});
+ const qtyBeforeNative=extAmmo.system.quantity;
+ const nativeAfterExternal=new ActionUse(extAction,1,extGun);
+ await nativeAfterExternal.process();
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(extAmmo.system.quantity,qtyBeforeNative-1,
+  'native attack following external consumption debits inventory only once');
+ assert.equal(extGun.flags.reloadState.slots.length,1,
+  'native shot removes exactly one remaining reserved chamber');
+ const qtyAfterNative=extAmmo.system.quantity;
+ const afterNativeExternal=await api.consumeAmmo(extGun,{
+  count:1,idempotencyKey:'after-native-001'});
+ assert.equal(afterNativeExternal.ok,true);
+ assert.equal(extAmmo.system.quantity,qtyAfterNative-1,
+  'external consumption following native attack debits exactly one');
+ assert.equal(extGun.flags.reloadState.slots.length,0);
+ // Native PF1 can cancel an ActionUse via a synchronous pre-use hook.
+ // A Script Call should request that cancellation before that phase.
+ const ability={id:'external-ability',uuid:'Actor.a.Item.external-ability',
+  type:'feat',actor,actions:[]};
+ const abilityAction={id:'ability-act',name:'Utility-style option',
+  hasAttack:false,actionType:'other',ammo:{type:null,cost:0}};
+ ability.actions=[abilityAction];actor.items.set(ability.id,ability);
+ const blockedUse=new ActionUse(abilityAction,0,ability);
+ events.callAll('pf1CreateActionUse',blockedUse);
+ const abort=api.abortExternalUse({item:ability,action:abilityAction,
+  reason:'ammo-not-loaded'});
+ assert.equal(abort.ok,true);
+ assert.equal(events.call('pf1PreActionUse',blockedUse),false,
+  'native cancellable hook stops the ability after Script Call request');
+ const lateUse=new ActionUse(abilityAction,0,ability);
+ events.callAll('pf1CreateActionUse',lateUse);
+ assert.equal(events.call('pf1PreActionUse',lateUse),true);
+ assert.equal(api.abortExternalUse({item:ability,action:abilityAction}).reason,
+  'native-pre-use-already-passed','cannot claim late cancellation succeeded');
+ events.callAll('pf1PostActionUse',lateUse,null);
+ actor.items.delete(ability.id);
  actor.items.delete(extGun.id);
  actor.items.delete(extAmmo.id);
  assert.equal(api.externalAmmoDiagnostic().event,'pf1frAmmoConsumed');
