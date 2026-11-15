@@ -12,6 +12,7 @@ const RL_BUSY=new Set(),RL_SHOTS=new WeakMap(),RL_DENIED=new WeakSet();
 const RL_RELOAD_SEEN=new WeakSet();
 const RL_FIRING=new Set();
 const RL_EXTERNAL_RECONCILE=new Set();
+const RL_EXTERNAL_AMMO_BUSY=new Set();
 let RL_EXTERNAL_LAST=null;
 const RL_EXTERNAL_OPS_LIMIT=32;
 const rlExternalResult=(weapon,state,count,ok,reason=null,other={})=>({
@@ -131,6 +132,13 @@ async function rlConsumeAmmo(weapon,{count=1,reason='external-script',idempotenc
     }
     stock.push({ammo,amount,abundant,before:quantity});
    }
+   // Guard shared inventory stacks on this client too; the weapon lock
+   // alone cannot serialize different weapons using the same ammunition.
+   const ammoKeys=stock.filter(entry=>!entry.abundant)
+    .map(entry=>actor.uuid+':'+entry.ammo.id);
+   if(ammoKeys.some(key=>RL_EXTERNAL_AMMO_BUSY.has(key)))
+    return bad('ammo-busy');
+   for(const key of ammoKeys)RL_EXTERNAL_AMMO_BUSY.add(key);
    const updated=[];
    try{
     for(const entry of stock){
@@ -138,6 +146,16 @@ async function rlConsumeAmmo(weapon,{count=1,reason='external-script',idempotenc
      await entry.ammo.update({'system.quantity':entry.before-entry.amount});
      updated.push(entry);
     }
+    // Optimistic checks: detect intervening Foundry document updates
+    // before writing the weapon state. These are safeguards, NOT an
+    // atomic transaction or a cross-client compare-and-swap.
+    const latestBeforeCommit=rlState(weapon);
+    if(!latestBeforeCommit||
+       latestBeforeCommit.slots.length!==state.slots.length||
+       latestBeforeCommit.slots.some((slot,i)=>slot.ammoId!==state.slots[i].ammoId))
+     throw Error('Chamber state changed before commit');
+    if(updated.some(entry=>rlQuantity(entry.ammo)!==entry.before-entry.amount))
+     throw Error('Inventory changed unexpectedly before commit');
     const next={...state,slots:state.slots.slice(count)};
     if(key){
      const op={key,count,ammoIds:[...groups.keys()],timestamp:Date.now()};
@@ -184,6 +202,8 @@ async function rlConsumeAmmo(weapon,{count=1,reason='external-script',idempotenc
     rlExternalEvent(recoveryFailed?'pf1frAmmoReconciliationRequired':
      'pf1frAmmoConsumeDenied',result);
     return result;
+   }finally{
+    for(const key of ammoKeys)RL_EXTERNAL_AMMO_BUSY.delete(key);
    }
   });
  }catch(error){
