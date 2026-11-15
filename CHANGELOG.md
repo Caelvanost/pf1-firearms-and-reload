@@ -1,3 +1,9 @@
+## 0.5.2 — Native Reload null.ammo crash fix
+
+- Fix a PF1 11.11 crash when choosing a native non-attack Reload action from the ActionSelector: `ActionUse.generateChatAttacks()` could encounter an ammo-marked attack entry without a corresponding ChatAttack and attempt to access `null.ammo`.
+- Clear only transient ammo selections for the exact non-attack Reload ActionUse immediately before native chat generation; leave actual ranged attacks, loaded chambers, inventory ammunition, and all rule logic untouched.
+- Add regression reproducing a stale native ammo entry on Reload and confirming ordinary firearm attacks are unchanged.
+
 ## 0.5.1 — Updated Foundry module summary
 
 - Expanded the short `module.json` description to cover all major features: chamber-based reloading, native and external ammunition consumption, misfires, explosions, range-based touch AC, and per-attack defense overrides.
