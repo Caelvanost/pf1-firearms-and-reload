@@ -15,6 +15,50 @@ const RL_EXTERNAL_RECONCILE=new Set();
 const RL_EXTERNAL_AMMO_BUSY=new Set();
 let RL_EXTERNAL_LAST=null;
 const RL_EXTERNAL_OPS_LIMIT=32;
+
+const RL_EXTERNAL_ACTIVE_USES=new Set(),RL_EXTERNAL_BLOCKED=new WeakMap();
+const RL_EXTERNAL_PRE_PASSED=new WeakSet();
+function rlTrackExternalUse(use){
+ if(!use?.item?.actor?.uuid||!use?.item?.uuid||!use?.action?.id)return;
+ RL_EXTERNAL_ACTIVE_USES.add({use,createdAt:Date.now()});
+}
+function rlExternalUseFor({item,action}={}){
+ if(!item?.uuid||!rlOwner(rlActor(item)))return null;
+ const now=Date.now();
+ for(const record of RL_EXTERNAL_ACTIVE_USES)
+  if(now-record.createdAt>120000)RL_EXTERNAL_ACTIVE_USES.delete(record);
+ const matches=[...RL_EXTERNAL_ACTIVE_USES].filter(record=>
+  record.use?.item?.uuid===item.uuid&&record.use?.actor?.uuid===item.actor?.uuid&&
+  (!action||record.use?.action?.id===action.id));
+ return matches.length===1?matches[0].use:null;
+}
+/** Only a specific live native ActionUse may be cancelled. */
+function rlAbortExternalUse({item,action,reason='external-ammo-refused'}={}){
+ const use=rlExternalUseFor({item,action});
+ if(!use)return {ok:false,reason:'native-use-not-unique-or-missing'};
+ if(RL_EXTERNAL_PRE_PASSED.has(use))
+  return {ok:false,reason:'native-pre-use-already-passed'};
+ RL_EXTERNAL_BLOCKED.set(use,String(reason).slice(0,200));
+ return {ok:true,reason:'native-use-will-be-blocked'};
+}
+function rlExternalPreUse(use){
+ RL_EXTERNAL_PRE_PASSED.add(use);
+ if(!RL_EXTERNAL_BLOCKED.has(use))return;
+ const reason=RL_EXTERNAL_BLOCKED.get(use);
+ RL_EXTERNAL_BLOCKED.delete(use);
+ for(const record of RL_EXTERNAL_ACTIVE_USES)
+  if(record.use===use)RL_EXTERNAL_ACTIVE_USES.delete(record);
+ rlExternalEvent('pf1frAmmoExternalUseBlocked',{
+  actorUuid:use.actor?.uuid??null,itemUuid:use.item?.uuid??null,
+  actionId:use.action?.id??null,reason
+ });
+ return false;
+}
+function rlExternalPostUse(use){
+ for(const record of RL_EXTERNAL_ACTIVE_USES)
+  if(record.use===use)RL_EXTERNAL_ACTIVE_USES.delete(record);
+}
+
 const rlExternalResult=(weapon,state,count,ok,reason=null,other={})=>({
  ok,reason,loaded:state?.slots?.length??0,
  capacity:state?.capacity??null,needed:count,
@@ -1498,6 +1542,7 @@ Hooks.once('ready',async()=>{
   configure:rlConfigure,reload:rlReload,unload:rlUnload,
   canConsumeAmmo:rlCanConsumeAmmo,consumeAmmo:rlConsumeAmmo,
   externalAmmoDiagnostic:rlExternalDiagnostic,
+  abortExternalUse:rlAbortExternalUse,
   infer:rlInfer,initialize:rlAutoConfigure,
    ensureReloadAction:rlEnsureReloadAction,reloadProfile:rlReloadProfile,
    diagnoseAutoAction:weapon=>({
@@ -1532,6 +1577,11 @@ Hooks.once('ready',async()=>{
   }
   return;
  }
+ // Synchronous, cancelable native PF1 hook. Do not claim a Script Call's
+ // own return value aborts the ActionUse: only this hook does.
+ Hooks.on('pf1CreateActionUse',rlTrackExternalUse);
+ Hooks.on('pf1PreActionUse',rlExternalPreUse);
+ Hooks.on('pf1PostActionUse',rlExternalPostUse);
  rlInstall();
  rlInstallInstantUse();
  rlInstallSelectorReload();
