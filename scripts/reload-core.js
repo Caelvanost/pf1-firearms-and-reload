@@ -222,12 +222,19 @@ async function rlConsumeAmmo(weapon,{count=1,reason='external-script',idempotenc
     if(!unchanged){
      recoveryFailed=true;
     }else{
-     for(const entry of updated.reverse()){
+     // The remote server may have applied an inventory write even if its
+     // returned Promise rejected. Inspect ALL attempted stock items, not
+     // only the writes whose promises reported success.
+     for(const entry of [...stock].reverse()){
+      if(entry.abundant)continue;
+      const actual=rlQuantity(entry.ammo);
+      if(actual===entry.before)continue; // no debit happened
+      if(actual!==entry.before-entry.amount){
+       recoveryFailed=true;continue; // another writer changed this stack
+      }
       try{
-       if(rlQuantity(entry.ammo)!==entry.before-entry.amount){
-        recoveryFailed=true;continue;
-       }
        await entry.ammo.update({'system.quantity':entry.before});
+       if(rlQuantity(entry.ammo)!==entry.before)recoveryFailed=true;
       }catch(rollbackError){
        recoveryFailed=true;
        console.error('[PF1FR][Ammo] Compensation failed',rollbackError);
