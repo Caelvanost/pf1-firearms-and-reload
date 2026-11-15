@@ -11,6 +11,186 @@ const RL_ACTION='pf1fr-reload';
 const RL_BUSY=new Set(),RL_SHOTS=new WeakMap(),RL_DENIED=new WeakSet();
 const RL_RELOAD_SEEN=new WeakSet();
 const RL_FIRING=new Set();
+const RL_EXTERNAL_RECONCILE=new Set();
+let RL_EXTERNAL_LAST=null;
+const RL_EXTERNAL_OPS_LIMIT=32;
+const rlExternalResult=(weapon,state,count,ok,reason=null,other={})=>({
+ ok,reason,loaded:state?.slots?.length??0,
+ capacity:state?.capacity??null,needed:count,
+ weaponUuid:weapon?.uuid??null,...other
+});
+function rlExternalDiagnostic(){return RL_EXTERNAL_LAST?rlClone(RL_EXTERNAL_LAST):null}
+function rlExternalEvent(name,data){
+ Hooks.callAll(name,data);
+ RL_EXTERNAL_LAST={...data,event:name,timestamp:Date.now()};
+}
+function rlExternalRefuse(weapon,state,count,reason,other={}){
+ const result=rlExternalResult(weapon,state,count,false,reason,other);
+ rlExternalEvent('pf1frAmmoConsumeDenied',result);
+ return result;
+}
+/**
+ * Pure read-only preflight for externally invoked shots (not native
+ * ActionUse). A loaded cartridge is reserved, not yet deducted from stock.
+ */
+function rlCanConsumeAmmo(weapon,{count=1,idempotencyKey}={}){
+ const actor=rlActor(weapon),state=rlState(weapon);
+ const base=additional=>rlExternalResult(weapon,state,count,false,null,additional);
+ if(!Number.isSafeInteger(count)||count<1||count>100)
+  return {...base({}),reason:'invalid-count'};
+ if(!rlAllowed())return {...base({}),reason:'module-unavailable'};
+ if(weapon?.type!=='weapon'||!actor||actor.items?.get?.(weapon.id)!==weapon)
+  return {...base({}),reason:'invalid-actor-weapon'};
+ if(!rlOwner(actor))return {...base({}),reason:'permission-denied'};
+ if(!state)return {...base({}),reason:'uninitialized'};
+ const operationKey=typeof idempotencyKey==='string'?idempotencyKey.trim():null;
+ if(idempotencyKey!==undefined&&(!operationKey||operationKey.length>128))
+  return {...base({}),reason:'invalid-idempotency-key'};
+ const previous=operationKey?state.externalOps?.find(x=>x.key===operationKey):null;
+ if(previous){
+  if(previous.count!==count)return {...base({}),reason:'idempotency-key-conflict'};
+  return rlExternalResult(weapon,state,count,true,null,{
+   duplicate:true,consumed:0,alreadyConsumed:previous.count,
+   operationKey,ammoIds:[...(previous.ammoIds??[])]
+  });
+ }
+ if(rlExploded(weapon)||weapon?.system?.destroyed===true||
+   (Number(weapon?.system?.hp?.max)>0&&Number(weapon?.system?.hp?.value)===0))
+  return {...base({}),reason:'weapon-unusable'};
+ if(weapon.getFlag?.(RL_NS,'externalAmmoNeedsReconciliation')===true||
+    RL_EXTERNAL_RECONCILE.has(weapon.uuid))
+  return {...base({}),reason:'reconciliation-required'};
+ if(RL_BUSY.has(weapon.uuid)||RL_FIRING.has(weapon.uuid))
+  return {...base({}),reason:'weapon-busy'};
+ if(state.slots.length<count)return {...base({}),reason:'not-loaded'};
+ const consumed=state.slots.slice(0,count),groups=new Map();
+ for(const slot of consumed)groups.set(slot.ammoId,(groups.get(slot.ammoId)??0)+1);
+ for(const [id,amount] of groups){
+  const ammo=rlAmmo(actor,id);
+  if(!ammo||ammo.inContainer||!rlIsWeaponAmmo(weapon,ammo,state.ammoType))
+   return {...base({}),reason:'ammo-missing-or-incompatible',ammoId:id};
+  if(ammo.system?.abundant===true)continue;
+  const quantity=rlQuantity(ammo);
+  const reservedOther=rlReservations(actor,id,weapon);
+  const reservedOwn=state.slots.filter(slot=>slot.ammoId===id).length;
+  if(!Number.isSafeInteger(quantity)||quantity<amount||
+      quantity<reservedOther+reservedOwn)
+   return {...base({}),reason:'inventory-insufficient',ammoId:id,
+    inventory:quantity,reserved:reservedOther+reservedOwn};
+ }
+ return rlExternalResult(weapon,state,count,true,null,{
+  ammoIds:[...groups.keys()],consumed:count,duplicate:false,
+  operationKey:operationKey??null
+ });
+}
+/**
+ * Foundry Item updates are NOT an atomic transaction across the ammo Item
+ * and weapon flag. Debit inventory FIRST and only then commit chambers.
+ * Best-effort compensation never silently overwrites another writer.
+ */
+async function rlConsumeAmmo(weapon,{count=1,reason='external-script',idempotencyKey}={}){
+ const initial=rlCanConsumeAmmo(weapon,{count,idempotencyKey});
+ if(!initial.ok){
+  rlExternalEvent('pf1frAmmoConsumeDenied',initial);
+  return initial;
+ }
+ if(initial.duplicate)return initial;
+ try{
+  return await rlLock(weapon,async()=>{
+   // rlLock holds RL_BUSY so the read-only public preflight is bypassed
+   // here; recheck state, inventory, and permissions using fresh data.
+   const actor=rlActor(weapon),state=rlState(weapon);
+   const bad=why=>rlExternalRefuse(weapon,state,count,why);
+   if(!state||!rlOwner(actor)||!rlAllowed())return bad('state-or-permission-changed');
+   if(rlExploded(weapon)||weapon.system?.destroyed===true||
+      (Number(weapon.system?.hp?.max)>0&&Number(weapon.system?.hp?.value)===0))
+    return bad('weapon-unusable');
+   if(weapon.getFlag?.(RL_NS,'externalAmmoNeedsReconciliation')===true||
+      RL_EXTERNAL_RECONCILE.has(weapon.uuid))return bad('reconciliation-required');
+   const key=typeof idempotencyKey==='string'?idempotencyKey.trim():null;
+   const previous=key?state.externalOps?.find(x=>x.key===key):null;
+   if(previous)return previous.count===count?
+    rlExternalResult(weapon,state,count,true,null,{duplicate:true,consumed:0,
+     alreadyConsumed:previous.count,operationKey:key,ammoIds:[...(previous.ammoIds??[])]}):
+    bad('idempotency-key-conflict');
+   if(state.slots.length<count)return bad('not-loaded');
+   const slots=state.slots.slice(0,count),groups=new Map();
+   for(const slot of slots)groups.set(slot.ammoId,(groups.get(slot.ammoId)??0)+1);
+   const stock=[];
+   for(const [id,amount] of groups){
+    const ammo=rlAmmo(actor,id);
+    if(!ammo||ammo.inContainer||!rlIsWeaponAmmo(weapon,ammo,state.ammoType))
+     return bad('ammo-missing-or-incompatible');
+    const abundant=ammo.system?.abundant===true,quantity=rlQuantity(ammo);
+    if(!abundant){
+     const reserved=rlReservations(actor,id,weapon)+
+       state.slots.filter(x=>x.ammoId===id).length;
+     if(!Number.isSafeInteger(quantity)||quantity<amount||quantity<reserved)
+      return bad('inventory-insufficient');
+     if(typeof ammo.update!=='function')return bad('ammo-update-unavailable');
+    }
+    stock.push({ammo,amount,abundant,before:quantity});
+   }
+   const updated=[];
+   try{
+    for(const entry of stock){
+     if(entry.abundant)continue;
+     await entry.ammo.update({'system.quantity':entry.before-entry.amount});
+     updated.push(entry);
+    }
+    const next={...state,slots:state.slots.slice(count)};
+    if(key){
+     const op={key,count,ammoIds:[...groups.keys()],timestamp:Date.now()};
+     next.externalOps=[...(state.externalOps??[]),op].slice(-RL_EXTERNAL_OPS_LIMIT);
+    }
+    await weapon.setFlag(RL_NS,RL_KEY,next);
+    const result=rlExternalResult(weapon,next,count,true,null,{
+     consumed:count,duplicate:false,operationKey:key,reasonLabel:String(reason).slice(0,200),
+     ammoIds:[...groups.keys()]
+    });
+    rlExternalEvent('pf1frAmmoConsumed',result);
+    return result;
+   }catch(error){
+    let recoveryFailed=false;
+    for(const entry of updated.reverse()){
+     try{
+      if(rlQuantity(entry.ammo)!==entry.before-entry.amount){
+       recoveryFailed=true;continue;
+      }
+      await entry.ammo.update({'system.quantity':entry.before});
+     }catch(rollbackError){
+      recoveryFailed=true;
+      console.error('[PF1FR][Ammo] Compensation failed',rollbackError);
+     }
+    }
+    // The state flag update may have succeeded server-side but its Promise
+    // rejected. Inspect persisted data before asserting rollback succeeded.
+    const latest=rlState(weapon);
+    if(!latest||latest.slots.length!==state.slots.length||
+       latest.slots.some((slot,i)=>slot.ammoId!==state.slots[i].ammoId))
+     recoveryFailed=true;
+    if(recoveryFailed){
+     RL_EXTERNAL_RECONCILE.add(weapon.uuid);
+     try{await weapon.setFlag(RL_NS,'externalAmmoNeedsReconciliation',true)}
+     catch(flagError){console.error('[PF1FR][Ammo] Could not mark reconciliation',flagError)}
+    }
+    const result=rlExternalResult(weapon,latest??state,count,false,
+     recoveryFailed?'reconciliation-required':'update-failed',{
+      error:String(error?.message??error),recovered:!recoveryFailed
+     });
+    rlExternalEvent(recoveryFailed?'pf1frAmmoReconciliationRequired':
+     'pf1frAmmoConsumeDenied',result);
+    return result;
+   }
+  });
+ }catch(error){
+  const result=rlExternalResult(weapon,rlState(weapon),count,false,
+   'weapon-busy',{error:String(error?.message??error)});
+  rlExternalEvent('pf1frAmmoConsumeDenied',result);
+  return result;
+ }
+}
+
 // Compatibility bridge for worlds listening to PF1AE's old event names.
 // The old engine is unloaded, so these notifications never double-apply changes.
 const rlEvent=(current,legacy,payload)=>{
@@ -165,7 +345,7 @@ function rlCheck(use){
  const needed=rlNeeded(use,state);
  if(needed===0)return {managed:false};
  if(needed===null)return {managed:true,ok:false,reason:'unknown attack count'};
- if(RL_FIRING.has(weapon.uuid))
+ if(RL_FIRING.has(weapon.uuid)||RL_BUSY.has(weapon.uuid))
   return {managed:true,ok:false,needed,loaded:state.slots.length,
     reason:'another shot is being processed'};
  const actual=(use.shared?.attacks??[]).reduce((sum,a)=>sum+(a?.hasAmmo?
@@ -1293,6 +1473,8 @@ Hooks.once('ready',async()=>{
    return {ok:!!state&&state.slots.length>=needed,needed,loaded:state?.slots.length??0};
   },
   configure:rlConfigure,reload:rlReload,unload:rlUnload,
+  canConsumeAmmo:rlCanConsumeAmmo,consumeAmmo:rlConsumeAmmo,
+  externalAmmoDiagnostic:rlExternalDiagnostic,
   infer:rlInfer,initialize:rlAutoConfigure,
    ensureReloadAction:rlEnsureReloadAction,reloadProfile:rlReloadProfile,
    diagnoseAutoAction:weapon=>({
