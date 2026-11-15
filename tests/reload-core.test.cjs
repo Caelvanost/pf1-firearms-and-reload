@@ -53,7 +53,16 @@ class ActionUse{
   }))};
  }
  getAmmo(){return [...actor.items.values()].filter(i=>i.type==='ammo'&&i.system?.subType===this.action.ammo?.type).map(i=>({id:i.id,quantity:i.system.quantity,abundant:!!i.system.abundant,document:i,isDefault:i.id===this.item.system.ammo.default}))}
- async generateChatAttacks(){if(this.action.hasAttack)count.rolls++}
+ async generateChatAttacks(){
+  // PF1 11.11 regression: even a nonattack action may have generated
+  // shared.attacks with hasAmmo true, but no corresponding ChatAttack.
+  // Native generateChatAttacks() then dereferences null.ammo.
+  if(!this.action.hasAttack){
+   for(const atk of this.shared.attacks)
+    if(atk.hasAmmo&&atk.chatAttack==null)
+     throw new TypeError("Cannot read properties of null (reading 'ammo')");
+  }else count.rolls++;
+ }
  async process(){
   events.callAll('pf1CreateActionUse',this);
   if(this.action.hasAttack){
@@ -370,6 +379,22 @@ context.globalThis=context;vm.createContext(context);vm.runInContext(code,contex
  await new Promise(r=>setImmediate(r));
  assert.equal(count.dialogs,dialogCountBeforeReload,
   'real PF1 ActionUse.process reload path must skip dialog');
+ // A real PF1 ActionUse may contain stale native attack-ammo records
+ // even though Reload is a nonattack action. They must be neutralized.
+ const ammoOnlyReload=new ActionUse(reloadAction,1);
+ events.callAll('pf1CreateActionUse',ammoOnlyReload);
+ assert.equal(ammoOnlyReload.shared.attacks[0].hasAmmo,true,
+  'fixture reproduces stale native ammunition selection');
+ await ammoOnlyReload.generateChatAttacks();
+ assert.equal(ammoOnlyReload.shared.attacks[0].hasAmmo,false);
+ assert.equal(ammoOnlyReload.shared.attacks[0].ammo,null);
+ assert.equal(ammoOnlyReload.generateChatAttacks.pf1frNonAttackAmmoGuard,true);
+ const preservedShot=new ActionUse(simple,1);
+ events.callAll('pf1CreateActionUse',preservedShot);
+ assert.notEqual(preservedShot.generateChatAttacks.pf1frNonAttackAmmoGuard,true,
+  'ordinary attacks do not receive the nonattack Reload guard');
+ assert.equal(preservedShot.shared.attacks[0].hasAmmo,true,
+  'firing ammunition remains unmodified by the Reload correction');
  const syntheticUse=new ActionUse(reloadAction,0);
  events.callAll('pf1CreateActionUse',syntheticUse);
  assert.equal(syntheticUse.shared.skipDialog,true,
