@@ -1,3 +1,15 @@
+## 0.5.0 — External ammo consumption API (experimental)
+
+- Public `api.reload.canConsumeAmmo(weapon,{count})` is synchronous and read-only: returns structured `ok/reason/loaded/capacity/needed` including missing inventory, destroyed weapons, permissions, uninitialized loading and busy state.
+- Public `await api.reload.consumeAmmo(weapon,{count,reason,idempotencyKey})` deducts **the actual loaded cartridge Item quantity** and removes precisely the corresponding reserved chambers without calling an attack. Supports multiple chambers, native PF1 ammo, explicitly linked legacy loot/ammo and `system.abundant` ammunition.
+- One-client weapon + ammunition-stack operation locks prevent double submissions and interleaved native shots; an operation's successful idempotency key is persisted in the weapon's existing reload state (last 32 operations).
+- Transaction safety: inventory-first writes, reread pre-commit, best-effort compensation on failure; when changes cannot be verified or restored, set `externalAmmoNeedsReconciliation`, emit diagnostic hook, and reject future external consumption. No claim of atomic cross-Item transactions or cross-client exactly-once semantics.
+- Optional native Script Call guard `findExternalActionUse({item,action})` and `abortExternalUse({item,action,reason})` allows a named native ability use to be rejected through the synchronous, cancellable `pf1PreActionUse` hook **when the guard is installed before that hook executes**; does not simulate retroactive cancellation.
+- Hooks `pf1frAmmoConsumed`, `pf1frAmmoConsumeDenied`, `pf1frAmmoReconciliationRequired`, `pf1frAmmoExternalUseBlocked`, and diagnostic `api.reload.externalAmmoDiagnostic()`.
+- Add French/English diagnostic strings and complete documentation with safe Utility-style item Script Call example. No class-specific or resource-cost automation.
+- Expand tests for 2→1→0, unloaded/insufficient stock, broken vs exploded, idempotency, concurrent requests, abundance, native/external ordering, failed writes and native cancellation.
+- Existing reload actions, PF1 native ammunition handling, long feu, explosion, defense providers and libWrapper integration remain unchanged.
+
 ## 0.4.3 — libWrapper compatibility for native PF1 use methods
 
 - Fix the libWrapper detected non-libWrapper wrapping warning on ItemPF.prototype.use. Remove direct assignments to native prototype.use methods.
