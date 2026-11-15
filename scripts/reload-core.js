@@ -1375,6 +1375,35 @@ function rlInstallInstantUse(){
 }
 function rlInstall(){
  Hooks.on('pf1AttackRoll',rlOnNativeAttackRoll);
+ // PF1 v11.11 generateChatAttacks() visits shared.attacks even on a
+ // non-attack Reload action. In the native implementation, hasAmmo=true
+ // with no ChatAttack produces a null.ammo error. Non-attack Reload never
+ // fires or spends native ammo; clear the transient ammo selection only
+ // for this ActionUse, immediately before PF1 generates its chat entries.
+ Hooks.on('pf1CreateActionUse',use=>{
+  if(!rlAllowed()||use?.action?.hasAttack===true||
+     !rlReloadRequest(use).candidate||
+     typeof use?.generateChatAttacks!=='function')return;
+  const nativeGenerate=use.generateChatAttacks;
+  if(nativeGenerate.pf1frNonAttackAmmoGuard)return;
+  const guarded=async function(...args){
+   if(Array.isArray(this.shared?.attacks)){
+    for(const attack of this.shared.attacks){
+     if(!attack||typeof attack!=='object')continue;
+     // Never alter the inventory or the weapon's reserved chambers.
+     // The native non-attack action cannot produce a weapon ChatAttack.
+     attack.ammo=null;
+     if(Object.prototype.hasOwnProperty.call(attack,'hasAmmo')||
+        'hasAmmo' in attack){
+      try{attack.hasAmmo=false}catch(_){}
+     }
+    }
+   }
+   return nativeGenerate.apply(this,args);
+  };
+  guarded.pf1frNonAttackAmmoGuard=true;
+  use.generateChatAttacks=guarded;
+ });
  // The actual PF1 dialog is created by ActionUse.process({skipDialog}).
  // PF1 constructs the ActionUse before processing and exposes that instance
  // through pf1CreateActionUse, independent of the sheet click handler.
