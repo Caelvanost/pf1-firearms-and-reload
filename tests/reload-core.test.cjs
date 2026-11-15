@@ -141,6 +141,160 @@ context.globalThis=context;vm.createContext(context);vm.runInContext(code,contex
   ['pf1frReloadUnload','frUnload'],['pf1aeUnload','oldUnload']
  ])events.on(event,()=>{seenEvents[key]++});
 
+ // External action ammunition API regression: does NOT execute an attack.
+ const extAmmo={id:'ext-am',type:'ammo',system:{quantity:8,subType:'gunBullet',abundant:false},
+  async update(data){
+   if(this.failUpdate)throw Error('simulated inventory write failure');
+   this.system.quantity=data['system.quantity'];
+  }};
+ actor.items.set(extAmmo.id,extAmmo);
+ const extGun={id:'ext-gun',uuid:'Actor.a.Item.ext-gun',type:'weapon',
+  name:'Pistolet à double canon',actor,system:{ammo:{default:extAmmo.id},
+   description:{value:'Capacity 2'}},actions:[],flags:{
+   reloadState:{schema:1,capacity:2,ammoType:'gunBullet',slots:[
+    {ammoId:extAmmo.id},{ammoId:extAmmo.id}],actionCosts:{}}
+  },
+  getFlag(_ns,k){return this.flags[k]},
+  async setFlag(_ns,k,value){
+   if(this.failFlag)throw Error('simulated chamber write failure');
+   this.flags[k]=structuredClone(value);return value;
+  },
+  async update(data){Object.assign(this.system,data)}
+ };
+ const extAction={id:'ext-shot',name:'Attack',item:extGun,hasAttack:true,
+  actionType:'rwak',ammo:{type:'gunBullet',cost:1}};
+ extGun.actions=[extAction];
+ actor.items.set(extGun.id,extGun);
+ const extFirst=api.canConsumeAmmo(extGun,{count:1});
+ assert.equal(extFirst.ok,true);
+ assert.equal(extFirst.loaded,2);
+ assert.equal(extFirst.capacity,2);
+ assert.equal(extFirst.needed,1);
+ assert.equal(extAmmo.system.quantity,8,'preflight never mutates inventory');
+ const externalEvents={success:0,denied:0,reconcile:0};
+ events.on('pf1frAmmoConsumed',()=>externalEvents.success++);
+ events.on('pf1frAmmoConsumeDenied',()=>externalEvents.denied++);
+ events.on('pf1frAmmoReconciliationRequired',()=>externalEvents.reconcile++);
+ const spent=await api.consumeAmmo(extGun,{
+  count:1,reason:'External Action',idempotencyKey:'use-001'});
+ assert.equal(spent.ok,true);
+ assert.equal(spent.loaded,1);
+ assert.equal(extAmmo.system.quantity,7);
+ assert.equal(extGun.flags.reloadState.slots.length,1);
+ assert.equal(extGun.flags.reloadState.slots[0].ammoId,extAmmo.id);
+ const duplicate=await api.consumeAmmo(extGun,{
+  count:1,idempotencyKey:'use-001'});
+ assert.equal(duplicate.ok,true);
+ assert.equal(duplicate.duplicate,true);
+ assert.equal(extAmmo.system.quantity,7,'idempotency never double debits');
+ assert.equal(extGun.flags.reloadState.slots.length,1);
+ assert.equal(api.canConsumeAmmo(extGun,{count:2}).reason,'not-loaded');
+ assert.equal((await api.consumeAmmo(extGun,{
+  count:1,idempotencyKey:'use-002'})).ok,true);
+ assert.equal(extGun.flags.reloadState.slots.length,0);
+ assert.equal(extAmmo.system.quantity,6);
+ assert.equal(api.canConsumeAmmo(extGun).reason,'not-loaded');
+ assert.equal((await api.consumeAmmo(extGun)).ok,false);
+ assert.equal(externalEvents.success,2);
+ assert.ok(externalEvents.denied>0);
+ // Resume with two new reserved rounds, using the existing native reload API.
+ await api.reload(extGun,{ammoId:extAmmo.id,count:2});
+ assert.equal(extGun.flags.reloadState.slots.length,2);
+ const nativeUse=new ActionUse(extAction,1,extGun);
+ // Native ammunition setup is valid only with PF1-generated selected ammo.
+ nativeUse.shared.attacks=[{hasAmmo:true,ammo:{id:extAmmo.id}}];
+ assert.equal(vm.runInContext('rlCheck',context)(nativeUse).ok,true);
+ extGun.flags.exploded=true;
+ assert.equal(api.canConsumeAmmo(extGun).reason,'weapon-unusable');
+ extGun.flags.exploded=false;
+ extAmmo.system.quantity=0;
+ assert.equal(api.canConsumeAmmo(extGun).reason,'inventory-insufficient');
+ extAmmo.system.quantity=6;
+ // A failed chamber commit must compensate the already-debited stock.
+ extGun.failFlag=true;
+ const failed=await api.consumeAmmo(extGun,{idempotencyKey:'failure-001'});
+ assert.equal(failed.ok,false);
+ assert.equal(failed.reason,'update-failed');
+ assert.equal(failed.recovered,true);
+ assert.equal(extAmmo.system.quantity,6);
+ assert.equal(extGun.flags.reloadState.slots.length,2);
+ extGun.failFlag=false;
+ // The first caller holds the local weapon lock across async inventory writes.
+ let releaseInventory;
+ const gate=new Promise(resolve=>releaseInventory=resolve);
+ const oldUpdate=extAmmo.update.bind(extAmmo);
+ extAmmo.update=async function(data){await gate;return oldUpdate(data)};
+ const pending=api.consumeAmmo(extGun,{idempotencyKey:'concurrent-001'});
+ const busy=await api.consumeAmmo(extGun,{idempotencyKey:'concurrent-002'});
+ assert.equal(busy.ok,false);
+ assert.equal(busy.reason,'weapon-busy');
+ releaseInventory();
+ assert.equal((await pending).ok,true);
+ assert.equal(extGun.flags.reloadState.slots.length,1);
+ assert.equal(extAmmo.system.quantity,5);
+ extAmmo.update=oldUpdate;
+ const afterExternal=new ActionUse(extAction,1,extGun);
+ afterExternal.shared.attacks=[{hasAmmo:true,ammo:{id:extAmmo.id}}];
+ assert.equal(vm.runInContext('rlCheck',context)(afterExternal).ok,true);
+ // A native attack in progress blocks external consumption.
+ vm.runInContext('RL_FIRING.add("Actor.a.Item.ext-gun")',context);
+ assert.equal(api.canConsumeAmmo(extGun).reason,'weapon-busy');
+ vm.runInContext('RL_FIRING.delete("Actor.a.Item.ext-gun")',context);
+ // Verify unlimited ammunition: chamber consumed, stock unchanged.
+ extAmmo.system.abundant=true;
+ const unlimited=await api.consumeAmmo(extGun,{count:1,idempotencyKey:'unlimited-001'});
+ assert.equal(unlimited.ok,true);
+ assert.equal(extAmmo.system.quantity,5);
+ assert.equal(extGun.flags.reloadState.slots.length,0);
+ extAmmo.system.abundant=false;
+ // A native PF1 shot following an external action spends inventory once
+ // and discards only its own chamber, not those previously consumed.
+ await api.reload(extGun,{count:2,ammoId:extAmmo.id});
+ const qtyBeforeNative=extAmmo.system.quantity;
+ const nativeAfterExternal=new ActionUse(extAction,1,extGun);
+ await nativeAfterExternal.process();
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(extAmmo.system.quantity,qtyBeforeNative-1,
+  'native attack following external consumption debits inventory only once');
+ assert.equal(extGun.flags.reloadState.slots.length,1,
+  'native shot removes exactly one remaining reserved chamber');
+ const qtyAfterNative=extAmmo.system.quantity;
+ const afterNativeExternal=await api.consumeAmmo(extGun,{
+  count:1,idempotencyKey:'after-native-001'});
+ assert.equal(afterNativeExternal.ok,true);
+ assert.equal(extAmmo.system.quantity,qtyAfterNative-1,
+  'external consumption following native attack debits exactly one');
+ assert.equal(extGun.flags.reloadState.slots.length,0);
+ // Native PF1 can cancel an ActionUse via a synchronous pre-use hook.
+ // A Script Call should request that cancellation before that phase.
+ const externalAbility={id:'external-ability',uuid:'Actor.a.Item.external-ability',
+  type:'feat',actor,actions:[]};
+ const externalAbilityAction={id:'external-ability-act',name:'Utility-style option',
+  hasAttack:false,actionType:'other',ammo:{type:null,cost:0}};
+ externalAbility.actions=[externalAbilityAction];actor.items.set(externalAbility.id,externalAbility);
+ const blockedUse=new ActionUse(externalAbilityAction,0,externalAbility);
+ events.callAll('pf1CreateActionUse',blockedUse);
+ const abort=api.abortExternalUse({item:externalAbility,action:externalAbilityAction,
+  reason:'ammo-not-loaded'});
+ assert.equal(abort.ok,true);
+ assert.equal(events.call('pf1PreActionUse',blockedUse),false,
+  'native cancellable hook stops the externalAbility after Script Call request');
+ const lateUse=new ActionUse(externalAbilityAction,0,externalAbility);
+ events.callAll('pf1CreateActionUse',lateUse);
+ assert.equal(events.call('pf1PreActionUse',lateUse),true);
+ assert.equal(api.abortExternalUse({item:externalAbility,action:externalAbilityAction}).reason,
+  'native-pre-use-already-passed','cannot claim late cancellation succeeded');
+ events.callAll('pf1PostActionUse',lateUse,null);
+ actor.items.delete(externalAbility.id);
+ actor.items.delete(extGun.id);
+ actor.items.delete(extAmmo.id);
+ // Restore independent pre-existing regression counters: the external
+ // suite deliberately exercised a genuine native ActionUse.
+ count.rolls=0;count.nativeAmmo=0;count.charges=0;
+ assert.equal(api.externalAmmoDiagnostic().event,'pf1frAmmoExternalUseBlocked',
+  'diagnostics retain the latest precise native abort event');
+ assert.ok(externalEvents.success>=4,'external consumption success hook was emitted');
+
  // Regression: widget anchors to a native language-independent hardness
  // input, within the sidebar; it must never prepend the item header.
  assert.match(code,/sidebar\.querySelector\('input\[name="system\.hardness"\]'\)/);

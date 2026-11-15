@@ -48,6 +48,19 @@
       "NoIndex": "Attack index not verified: override not applied.",
       "Permission": "Actor OWNER permission required.",
       "Diagnostics": "Defense override diagnostic"
+    },
+    "ExternalAmmo": {
+      "NoWeapon": "No uniquely identifiable equipped, loaded weapon.",
+      "Consumed": "{count} cartridge(s) consumed from {weapon}.",
+      "NotLoaded": "Weapon lacks sufficient loaded cartridges.",
+      "InventoryInsufficient": "The inventory no longer has sufficient ammunition reserved for the weapon.",
+      "WeaponUnusable": "Weapon is destroyed or unusable.",
+      "Busy": "Weapon or ammunition stock is currently busy.",
+      "Reconciliation": "Inconsistent state requires GM reconciliation.",
+      "Cancelled": "Native action blocked: {reason}.",
+      "NoCancel": "Native action could not be cancelled at this stage.",
+      "Permission": "You do not have the required permissions.",
+      "Missing": "Missing or incompatible ammunition."
     }
   }
 }

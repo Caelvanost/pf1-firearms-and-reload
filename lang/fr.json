@@ -48,6 +48,19 @@
       "NoIndex": "Indice de jet non vérifié : exception non appliquée.",
       "Permission": "Permission propriétaire requise sur le personnage.",
       "Diagnostics": "Diagnostic d'exception de défense"
+    },
+    "ExternalAmmo": {
+      "NoWeapon": "Aucune arme équipée et chargée identifiable sans ambiguïté.",
+      "Consumed": "{count} munition(s) consommée(s) depuis {weapon}.",
+      "NotLoaded": "L'arme ne contient pas assez de munitions chargées.",
+      "InventoryInsufficient": "Les munitions chargées ne sont plus disponibles en quantité suffisante dans l'inventaire.",
+      "WeaponUnusable": "L'arme est détruite ou inutilisable.",
+      "Busy": "L'arme ou sa réserve de munitions est déjà utilisée.",
+      "Reconciliation": "Une incohérence nécessite une vérification du MJ.",
+      "Cancelled": "Utilisation native bloquée : {reason}.",
+      "NoCancel": "L'utilisation native n'a pas pu être annulée à ce stade.",
+      "Permission": "Vous n'avez pas les permissions nécessaires.",
+      "Missing": "Munition manquante ou incompatible."
     }
   }
 }

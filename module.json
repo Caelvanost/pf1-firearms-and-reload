@@ -1,8 +1,8 @@
 {
   "id": "pf1-firearms-and-reload",
   "title": "PF1 Firearms & Reload",
-  "description": "Use libWrapper-compatible native PF1 Item and ItemAction hooks for immediate Reload, avoiding non-libWrapper prototype conflicts.",
-  "version": "0.4.3",
+  "description": "Public external ammo consumption API for native PF1 Script Calls: read-only preflight, one-shot chamber/inventory debit, idempotency, cancellation and reconciliation diagnostics.",
+  "version": "0.5.0",
   "authors": [
     {
       "name": "Caelvanost"
@@ -49,6 +49,6 @@
   "url": "https://github.com/Caelvanost/pf1-firearms-and-reload",
   "manifest": "https://raw.githubusercontent.com/Caelvanost/pf1-firearms-and-reload/main/module.json",
   "readme": "https://github.com/Caelvanost/pf1-firearms-and-reload/blob/main/README.md",
-  "download": "https://github.com/Caelvanost/pf1-firearms-and-reload/releases/download/v0.4.3/pf1-firearms-and-reload-v0.4.3.zip",
+  "download": "https://github.com/Caelvanost/pf1-firearms-and-reload/releases/download/v0.5.0/pf1-firearms-and-reload-v0.5.0.zip",
   "changelog": "https://github.com/Caelvanost/pf1-firearms-and-reload/blob/main/CHANGELOG.md"
 }
