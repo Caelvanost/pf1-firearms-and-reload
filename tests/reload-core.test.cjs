@@ -288,7 +288,9 @@ context.globalThis=context;vm.createContext(context);vm.runInContext(code,contex
  actor.items.delete(externalAbility.id);
  actor.items.delete(extGun.id);
  actor.items.delete(extAmmo.id);
- assert.equal(api.externalAmmoDiagnostic().event,'pf1frAmmoConsumed');
+ assert.equal(api.externalAmmoDiagnostic().event,'pf1frAmmoExternalUseBlocked',
+  'diagnostics retain the latest precise native abort event');
+ assert.ok(externalEvents.success>=4,'external consumption success hook was emitted');
 
  // Regression: widget anchors to a native language-independent hardness
  // input, within the sidebar; it must never prepend the item header.
