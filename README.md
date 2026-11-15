@@ -153,3 +153,7 @@ PF1FR now exposes a **class- and resource-neutral** in-memory API for selecting 
 ## v0.4.3 — libWrapper compatibility
 
 PF1FR now registers its native PF1 ItemPF.use and ItemAction.use interception with libWrapper instead of directly replacing prototype methods. The module requires the **lib-wrapper** Foundry module. Ordinary native actions continue to the next wrapper; Reload still uses actionId and skipDialog to avoid the second configuration dialog. The original ActionSelector click shortcut remains unchanged. If libWrapper is not available, PF1FR warns rather than directly patching prototypes. Existing reloading, ammunition, misfire, explosion, and temporary defense features are otherwise unchanged.
+
+## v0.5.0 — Public external ammo consumption for PF1 Script Calls
+
+An external ability or feat can now spend a loaded weapon's reserved ammunition through `game.modules.get('pf1-firearms-and-reload').api.reload.canConsumeAmmo(weapon,{count:1})` and `await api.reload.consumeAmmo(weapon,{count:1,reason:'external-script',idempotencyKey:'unique-use'})`. This does **not** call a native weapon attack. Public events and diagnostics expose consumed/refused/reconciliation outcomes; the new `abortExternalUse` helper can request native use cancellation **before** the cancellable PF1 pre-use hook. See [the complete API, safety limitations and Script Call example](docs/EXTERNAL-AMMO-API.md). Transactions spanning two Foundry Item documents are best-effort, not atomic across clients.
