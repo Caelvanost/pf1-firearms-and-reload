@@ -267,25 +267,25 @@ context.globalThis=context;vm.createContext(context);vm.runInContext(code,contex
  assert.equal(extGun.flags.reloadState.slots.length,0);
  // Native PF1 can cancel an ActionUse via a synchronous pre-use hook.
  // A Script Call should request that cancellation before that phase.
- const ability={id:'external-ability',uuid:'Actor.a.Item.external-ability',
+ const externalAbility={id:'external-ability',uuid:'Actor.a.Item.external-ability',
   type:'feat',actor,actions:[]};
- const abilityAction={id:'ability-act',name:'Utility-style option',
+ const abilityAction={id:'externalAbility-act',name:'Utility-style option',
   hasAttack:false,actionType:'other',ammo:{type:null,cost:0}};
- ability.actions=[abilityAction];actor.items.set(ability.id,ability);
- const blockedUse=new ActionUse(abilityAction,0,ability);
+ externalAbility.actions=[abilityAction];actor.items.set(externalAbility.id,externalAbility);
+ const blockedUse=new ActionUse(abilityAction,0,externalAbility);
  events.callAll('pf1CreateActionUse',blockedUse);
- const abort=api.abortExternalUse({item:ability,action:abilityAction,
+ const abort=api.abortExternalUse({item:externalAbility,action:abilityAction,
   reason:'ammo-not-loaded'});
  assert.equal(abort.ok,true);
  assert.equal(events.call('pf1PreActionUse',blockedUse),false,
-  'native cancellable hook stops the ability after Script Call request');
- const lateUse=new ActionUse(abilityAction,0,ability);
+  'native cancellable hook stops the externalAbility after Script Call request');
+ const lateUse=new ActionUse(abilityAction,0,externalAbility);
  events.callAll('pf1CreateActionUse',lateUse);
  assert.equal(events.call('pf1PreActionUse',lateUse),true);
- assert.equal(api.abortExternalUse({item:ability,action:abilityAction}).reason,
+ assert.equal(api.abortExternalUse({item:externalAbility,action:abilityAction}).reason,
   'native-pre-use-already-passed','cannot claim late cancellation succeeded');
  events.callAll('pf1PostActionUse',lateUse,null);
- actor.items.delete(ability.id);
+ actor.items.delete(externalAbility.id);
  actor.items.delete(extGun.id);
  actor.items.delete(extAmmo.id);
  assert.equal(api.externalAmmoDiagnostic().event,'pf1frAmmoConsumed');
