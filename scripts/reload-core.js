@@ -1543,6 +1543,7 @@ Hooks.once('ready',async()=>{
   canConsumeAmmo:rlCanConsumeAmmo,consumeAmmo:rlConsumeAmmo,
   externalAmmoDiagnostic:rlExternalDiagnostic,
   abortExternalUse:rlAbortExternalUse,
+  findExternalActionUse:rlExternalUseFor,
   infer:rlInfer,initialize:rlAutoConfigure,
    ensureReloadAction:rlEnsureReloadAction,reloadProfile:rlReloadProfile,
    diagnoseAutoAction:weapon=>({
