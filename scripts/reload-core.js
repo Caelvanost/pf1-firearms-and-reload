@@ -151,24 +151,27 @@ async function rlConsumeAmmo(weapon,{count=1,reason='external-script',idempotenc
     rlExternalEvent('pf1frAmmoConsumed',result);
     return result;
    }catch(error){
+    // Never refund stock if the weapon document may already have committed
+    // the new chamber state. Reconcile rather than manufacture rounds.
     let recoveryFailed=false;
-    for(const entry of updated.reverse()){
-     try{
-      if(rlQuantity(entry.ammo)!==entry.before-entry.amount){
-       recoveryFailed=true;continue;
+    const latest=rlState(weapon);
+    const unchanged=!!latest&&latest.slots.length===state.slots.length&&
+      latest.slots.every((slot,i)=>slot.ammoId===state.slots[i].ammoId);
+    if(!unchanged){
+     recoveryFailed=true;
+    }else{
+     for(const entry of updated.reverse()){
+      try{
+       if(rlQuantity(entry.ammo)!==entry.before-entry.amount){
+        recoveryFailed=true;continue;
+       }
+       await entry.ammo.update({'system.quantity':entry.before});
+      }catch(rollbackError){
+       recoveryFailed=true;
+       console.error('[PF1FR][Ammo] Compensation failed',rollbackError);
       }
-      await entry.ammo.update({'system.quantity':entry.before});
-     }catch(rollbackError){
-      recoveryFailed=true;
-      console.error('[PF1FR][Ammo] Compensation failed',rollbackError);
      }
     }
-    // The state flag update may have succeeded server-side but its Promise
-    // rejected. Inspect persisted data before asserting rollback succeeded.
-    const latest=rlState(weapon);
-    if(!latest||latest.slots.length!==state.slots.length||
-       latest.slots.some((slot,i)=>slot.ammoId!==state.slots[i].ammoId))
-     recoveryFailed=true;
     if(recoveryFailed){
      RL_EXTERNAL_RECONCILE.add(weapon.uuid);
      try{await weapon.setFlag(RL_NS,'externalAmmoNeedsReconciliation',true)}
