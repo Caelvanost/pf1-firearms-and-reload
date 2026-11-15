@@ -288,6 +288,9 @@ context.globalThis=context;vm.createContext(context);vm.runInContext(code,contex
  actor.items.delete(externalAbility.id);
  actor.items.delete(extGun.id);
  actor.items.delete(extAmmo.id);
+ // Restore independent pre-existing regression counters: the external
+ // suite deliberately exercised a genuine native ActionUse.
+ count.rolls=0;count.nativeAmmo=0;count.charges=0;
  assert.equal(api.externalAmmoDiagnostic().event,'pf1frAmmoExternalUseBlocked',
   'diagnostics retain the latest precise native abort event');
  assert.ok(externalEvents.success>=4,'external consumption success hook was emitted');
